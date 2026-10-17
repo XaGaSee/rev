@@ -11,7 +11,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import Message
 
 from bot.config import settings
-from bot.data.catalog import get_model, is_vision_model
+from bot.catalog import get_model, is_vision_model
 from bot.database.db import Database
 from bot.database.models import User
 from bot.handlers.common import generate_and_reply

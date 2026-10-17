@@ -8,7 +8,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
 from bot.config import settings
-from bot.data.catalog import get_model
+from bot.catalog import get_model
 from bot.database.db import Database
 from bot.database.models import User
 from bot.keyboards.inline import main_menu

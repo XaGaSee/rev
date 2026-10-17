@@ -10,7 +10,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot.data.catalog import CATEGORIES, get_model
+from bot.catalog import CATEGORIES, get_model
 from bot.database.db import Database
 from bot.database.models import User
 from bot.handlers.commands import HELP_TEXT

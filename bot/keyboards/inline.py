@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.data.catalog import CATEGORIES, models_by_category
+from bot.catalog import CATEGORIES, models_by_category
 
 PAGE_SIZE = 6
 

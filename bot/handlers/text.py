@@ -5,7 +5,7 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.types import Message
 
-from bot.data.catalog import is_image_model
+from bot.catalog import is_image_model
 from bot.database.db import Database
 from bot.database.models import User
 from bot.handlers.common import generate_and_reply, generate_image_and_reply
