@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.catalog import CATEGORIES, models_by_category
+from bot.catalog import CATEGORIES, ModelInfo, image_models, models_by_category
 
 PAGE_SIZE = 6
 
@@ -34,6 +34,7 @@ def back_to_menu() -> InlineKeyboardMarkup:
 def models_categories() -> InlineKeyboardMarkup:
     """Category picker for the model catalog."""
     rows = [[_btn(f"{c.icon} {c.title}", f"models:cat:{c.key}")] for c in CATEGORIES]
+    rows.append([_btn("🔍 Поиск модели", "models:search")])
     rows.append([_btn("⬅️ В меню", "menu:main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -58,7 +59,44 @@ def models_list(category: str, page: int, current_model: str) -> InlineKeyboardM
     if page < total_pages - 1:
         nav.append(_btn("➡️", f"models:page:{category}:{page + 1}"))
     rows.append(nav)
-    rows.append([_btn("🗂 Категории", "menu:models"), _btn("⬅️ В меню", "menu:main")])
+    rows.append([_btn("🔍 Поиск", "models:search"), _btn("🗂 Категории", "menu:models")])
+    rows.append([_btn("⬅️ В меню", "menu:main")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def search_results(items: list[ModelInfo], page: int, current_model: str) -> InlineKeyboardMarkup:
+    """Paginated results of a model search."""
+    total_pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
+    page = max(0, min(page, total_pages - 1))
+    start = page * PAGE_SIZE
+    chunk = items[start : start + PAGE_SIZE]
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for model in chunk:
+        mark = "✅ " if model.id == current_model else ""
+        rows.append([_btn(f"{mark}{model.label}", f"models:set:{model.id}")])
+
+    if total_pages > 1:
+        nav: list[InlineKeyboardButton] = []
+        if page > 0:
+            nav.append(_btn("⬅️", f"models:spage:{page - 1}"))
+        nav.append(_btn(f"{page + 1}/{total_pages}", f"models:spage:{page}"))
+        if page < total_pages - 1:
+            nav.append(_btn("➡️", f"models:spage:{page + 1}"))
+        rows.append(nav)
+
+    rows.append([_btn("🔍 Новый поиск", "models:search"), _btn("🗂 Категории", "menu:models")])
+    rows.append([_btn("⬅️ В меню", "menu:main")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def image_models_keyboard(current_model: str = "") -> InlineKeyboardMarkup:
+    """One-click switch to an image generation model."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for model in image_models():
+        mark = "✅ " if model.id == current_model else ""
+        rows.append([_btn(f"{mark}{model.label}", f"models:set:{model.id}")])
+    rows.append([_btn("🗂 Все модели", "menu:models"), _btn("🏠 В меню", "menu:main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

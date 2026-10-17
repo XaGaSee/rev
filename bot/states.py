@@ -19,6 +19,12 @@ class ImageStates(StatesGroup):
     prompt = State()
 
 
+class ModelStates(StatesGroup):
+    """Model catalog search flow."""
+
+    WaitForModelSearch = State()
+
+
 class AdminStates(StatesGroup):
     """Admin panel flows."""
 

@@ -7,6 +7,7 @@ from typing import Any, Awaitable, Callable
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, User as TgUser
 
+from bot.catalog import DEFAULT_MODEL_ID, MODEL_MAP
 from bot.config import settings
 from bot.database.db import Database
 
@@ -31,9 +32,16 @@ class UserMiddleware(BaseMiddleware):
             user_id=tg_user.id,
             username=tg_user.username,
             first_name=tg_user.first_name,
-            default_model=settings.default_model,
+            default_model=self._default_model(),
             default_temperature=settings.default_temperature,
         )
         data["user"] = user
         data["is_admin"] = tg_user.id in settings.admin_ids
         return await handler(event, data)
+
+    @staticmethod
+    def _default_model() -> str:
+        """Use the configured model when valid, otherwise the catalog default."""
+        if settings.default_model in MODEL_MAP:
+            return settings.default_model
+        return DEFAULT_MODEL_ID

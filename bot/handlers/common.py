@@ -12,10 +12,11 @@ from aiogram.enums import ChatAction, ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import BufferedInputFile, Message
 
+from bot.catalog import get_model, is_image_model
 from bot.config import settings
 from bot.database.db import Database
 from bot.database.models import User
-from bot.keyboards.inline import image_actions
+from bot.keyboards.inline import image_actions, image_models_keyboard
 from bot.services.image import data_url_to_bytes, is_data_url
 from bot.services.openrouter import (
     ChatMessage,
@@ -205,6 +206,16 @@ async def generate_image_and_reply(
     prompt: str,
 ) -> None:
     """Generate one or more images for *prompt* and deliver them."""
+    if not is_image_model(user.model):
+        model = get_model(user.model)
+        await message.answer(
+            f"🖼 Текущая модель <b>{model.name}</b> не поддерживает генерацию изображений.\n"
+            "Выберите модель для рисования:",
+            parse_mode=ParseMode.HTML,
+            reply_markup=image_models_keyboard(user.model),
+        )
+        return
+
     if user.budget_exceeded:
         await message.answer(
             f"🚫 Достигнут лимит бюджета ({format_cost(user.budget)}). "

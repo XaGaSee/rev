@@ -42,7 +42,7 @@ async def send_main_menu(message: Message, user: User, is_admin: bool) -> None:
     text = (
         f"👋 <b>Привет, {user.display_name}!</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🧠 Модель: <b>{model.name}</b>\n"
+        f"🧠 Модель: <b>{model.name}</b> · {model.price_str}\n"
         f"🌡 Температура: <b>{user.temperature:.2f}</b>\n"
         f"📨 Запросов: <b>{user.requests}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -76,6 +76,7 @@ async def cmd_profile(message: Message, user: User, is_admin: bool) -> None:
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"🆔 ID: <code>{user.user_id}</code>\n"
         f"🧠 Модель: <b>{model.name}</b>\n"
+        f"💰 Цена: <b>{model.price_str}</b>\n"
         f"🌡 Температура: <b>{user.temperature:.2f}</b>\n"
         f"📝 Системный промпт: <i>{prompt}</i>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"

@@ -10,7 +10,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot.catalog import CATEGORIES, get_model
+from bot.catalog import CATEGORIES, get_model, is_image_model, search_models
 from bot.database.db import Database
 from bot.database.models import User
 from bot.handlers.commands import HELP_TEXT
@@ -21,14 +21,16 @@ from bot.keyboards.inline import (
     confirm_reset,
     cost_menu,
     describe_category,
+    image_models_keyboard,
     main_menu,
     models_categories,
     models_list,
+    search_results,
     settings_menu,
 )
 from bot.services.pricing import PricingService, format_cost, format_price_per_million
 from bot.services.tokens import format_tokens
-from bot.states import ImageStates, SettingsStates
+from bot.states import ImageStates, ModelStates, SettingsStates
 from bot.utils.text import escape_html
 
 logger = logging.getLogger(__name__)
@@ -54,7 +56,7 @@ def _main_menu_text(user: User) -> str:
     return (
         f"🏠 <b>Главное меню</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🧠 Модель: <b>{model.name}</b>\n"
+        f"🧠 Модель: <b>{model.name}</b> · {model.price_str}\n"
         f"📨 Запросов: <b>{user.requests}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "Выбери действие или просто напиши сообщение ✍️"
@@ -70,6 +72,7 @@ def _profile_text(user: User) -> str:
         "━━━━━━━━━━━━━━━━━━━━\n"
         f"🆔 ID: <code>{user.user_id}</code>\n"
         f"🧠 Модель: <b>{model.name}</b>\n"
+        f"💰 Цена: <b>{model.price_str}</b>\n"
         f"🌡 Температура: <b>{user.temperature:.2f}</b>\n"
         f"📝 Промпт: <i>{prompt}</i>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -88,10 +91,11 @@ async def _cost_text(user: User, pricing: PricingService) -> str:
         "🪙 <b>Стоимость и бюджет</b>",
         "━━━━━━━━━━━━━━━━━━━━",
         f"🧠 Модель: <b>{model.name}</b>",
+        f"💲 Тариф: <b>{model.price_str}</b>",
         f"📥 Ввод: <b>{format_price_per_million(prompt_price)}</b> / 1M токенов",
         f"📤 Вывод: <b>{format_price_per_million(completion_price)}</b> / 1M токенов",
     ]
-    if model.image_generation:
+    if model.supports_image_generation:
         lines.append(f"🖼 Изображение: <b>{format_cost(image_price)}</b> / шт")
     lines += [
         "━━━━━━━━━━━━━━━━━━━━",
@@ -125,10 +129,12 @@ async def cb_profile(callback: CallbackQuery, user: User, is_admin: bool) -> Non
 @router.callback_query(F.data == "menu:settings")
 async def cb_settings(callback: CallbackQuery, user: User) -> None:
     await callback.answer()
+    model = get_model(user.model)
     budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
     text = (
         "🧠 <b>Настройки модели</b>\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
+        f"🧠 Модель: <b>{model.name}</b> ({model.price_str})\n"
         f"🌡 Текущая температура: <b>{user.temperature:.2f}</b>\n"
         f"📝 Промпт: <i>{escape_html(user.system_prompt) if user.system_prompt else '—'}</i>\n"
         f"🪙 Потрачено: <b>{format_cost(user.cost)}</b> (лимит: {budget})"
@@ -157,8 +163,17 @@ async def cb_reset_prompt(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "menu:image")
-async def cb_image(callback: CallbackQuery, state: FSMContext) -> None:
+async def cb_image(callback: CallbackQuery, state: FSMContext, user: User) -> None:
     await callback.answer()
+    if not is_image_model(user.model):
+        model = get_model(user.model)
+        await _edit(
+            callback,
+            f"🖼 Текущая модель <b>{model.name}</b> не поддерживает генерацию изображений.\n"
+            "Выберите модель для рисования:",
+            image_models_keyboard(user.model),
+        )
+        return
     await state.set_state(ImageStates.prompt)
     await _edit(
         callback,
@@ -210,14 +225,76 @@ async def cb_model_page(callback: CallbackQuery, user: User) -> None:
 
 @router.callback_query(F.data.startswith("models:set:"))
 async def cb_model_set(
-    callback: CallbackQuery, db: Database, user: User, is_admin: bool
+    callback: CallbackQuery, state: FSMContext, db: Database, user: User, is_admin: bool
 ) -> None:
     model_id = callback.data.split(":", 2)[2]  # type: ignore[union-attr]
     info = get_model(model_id)
     await db.set_model(user.id, info.id)
     user.model = info.id
-    await callback.answer(f"✅ Модель: {info.name}")
+    await state.clear()
+    await callback.answer(f"✅ Модель: {info.name} {info.price_short}")
     await _edit(callback, _main_menu_text(user), main_menu(is_admin))
+
+
+@router.callback_query(F.data == "models:search")
+async def cb_model_search(callback: CallbackQuery, state: FSMContext) -> None:
+    await callback.answer()
+    await state.set_state(ModelStates.WaitForModelSearch)
+    await _edit(
+        callback,
+        "🔍 <b>Поиск модели</b>\n\n"
+        "Напишите название или фрагмент, например <code>deepseek</code>, "
+        "<code>qwen</code> или <code>flux</code>.",
+        cancel("menu:models"),
+    )
+
+
+@router.callback_query(F.data.startswith("models:spage:"))
+async def cb_model_search_page(
+    callback: CallbackQuery, state: FSMContext, user: User
+) -> None:
+    _, _, page_raw = callback.data.split(":", 2)  # type: ignore[union-attr]
+    try:
+        page = int(page_raw)
+    except ValueError:
+        page = 0
+    data = await state.get_data()
+    query = str(data.get("query", ""))
+    items = search_models(query)
+    if not items:
+        await callback.answer("Ничего не найдено", show_alert=True)
+        return
+    await callback.answer()
+    await _edit(
+        callback,
+        f"🔍 <b>Поиск:</b> <code>{escape_html(query)}</code>\n"
+        f"Найдено: <b>{len(items)}</b>",
+        search_results(items, page, user.model),
+    )
+
+
+@router.message(ModelStates.WaitForModelSearch, F.text)
+async def do_model_search(message: Message, state: FSMContext, user: User) -> None:
+    query = (message.text or "").strip()
+    if len(query) < 2:
+        await message.answer("⚠️ Введите минимум 2 символа для поиска.")
+        return
+    items = search_models(query)
+    if not items:
+        await message.answer(
+            f"🔍 По запросу <code>{escape_html(query)}</code> ничего не найдено.\n"
+            "Попробуйте другое название.",
+            parse_mode=ParseMode.HTML,
+            reply_markup=cancel("menu:models"),
+        )
+        return
+    await state.update_data(query=query)
+    await message.answer(
+        f"🔍 <b>Поиск:</b> <code>{escape_html(query)}</code>\n"
+        f"Найдено: <b>{len(items)}</b>",
+        parse_mode=ParseMode.HTML,
+        reply_markup=search_results(items, 0, user.model),
+    )
 
 
 # ----------------------------------------------------------------- settings

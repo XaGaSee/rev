@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     throttling_rate: float = Field(0.7, description="Seconds between messages")
 
     # --- Model defaults ---
-    default_model: str = Field("openai/gpt-4o-mini")
+    default_model: str = Field("nvidia/nemotron-3.5-super-vl:free")
     default_temperature: float = Field(0.7)
     max_history_messages: int = Field(12)
     max_context_tokens: int = Field(6000)
