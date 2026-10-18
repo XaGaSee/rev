@@ -344,6 +344,13 @@ class Database:
         await self.connection.commit()
         return cursor.rowcount or 0
 
+    async def count_messages(self, user_id: int) -> int:
+        """Number of stored dialog turns for a user."""
+        row = await self._fetchone(
+            "SELECT COUNT(*) AS n FROM messages WHERE user_id = ?", (user_id,)
+        )
+        return int(row["n"]) if row else 0
+
     # ------------------------------------------------------------------ stats
     async def get_stats(self) -> Stats:
         """Return global aggregated statistics."""

@@ -15,51 +15,71 @@ from bot.database.models import User
 from bot.keyboards.inline import main_menu, models_categories
 from bot.services.pricing import format_cost
 from bot.services.tokens import format_tokens
+from bot.utils.text import escape_html
 
 HELP_TEXT = (
-    "Просто напишите сообщение — бот ответит.\n\n"
-    "🖼 Фото — анализ изображения (нужна vision-модель)\n"
-    "🎙 Голосовое — распознаётся и отправляется модели\n"
-    "🎨 Нарисовать — генерация изображения\n\n"
-    "/menu — меню · /model — модели · /profile — профиль\n"
-    "/reset — очистить контекст · /help — справка"
+    "AI Assistant Gateway\n\n"
+    "Отправьте текстовый запрос, изображение или голосовое сообщение — "
+    "модель вернёт ответ.\n\n"
+    "/menu — навигация\n"
+    "/model — каталог моделей\n"
+    "/profile — профиль и статистика\n"
+    "/reset — очистить контекст\n"
+    "/help — эта справка"
 )
 
 
-def get_main_menu_payload(user: User, is_admin: bool = False) -> tuple[str, InlineKeyboardMarkup]:
+def _plural_messages(count: int) -> str:
+    """Russian plural form for the message counter."""
+    if count % 10 == 1 and count % 100 != 11:
+        return "сообщение"
+    if 2 <= count % 10 <= 4 and not 12 <= count % 100 <= 14:
+        return "сообщения"
+    return "сообщений"
+
+
+def get_main_menu_payload(
+    user: User, is_admin: bool = False, context_messages: int = 0
+) -> tuple[str, InlineKeyboardMarkup]:
     """Actual main-screen text and keyboard for *user*."""
     model = get_model(user.model)
     if user.user_id in settings.admin_ids:
-        limit_line = "без лимита (админ)"
+        limit_line = "без ограничений (админ)"
     else:
         used = user.daily_count if user.daily_date == utc_today() else 0
-        limit_line = f"{used}/{settings.daily_message_limit}"
+        limit_line = f"{used} / {settings.daily_message_limit} запросов (сброс в 00:00 UTC)"
     text = (
-        f"Модель: <b>{model.name}</b> · {model.price_str}\n"
-        f"Лимит: {limit_line} · Запросов: {user.requests}\n"
-        "Напишите сообщение или выберите действие."
+        "AI Assistant Gateway\n\n"
+        f"Модель: {model.label}\n"
+        f"Лимит: {limit_line}\n"
+        f"Контекст: {context_messages} {_plural_messages(context_messages)}\n\n"
+        "Отправьте текстовый запрос, изображение или голосовое сообщение."
     )
     return text, main_menu(is_admin)
 
 
 def get_models_payload() -> tuple[str, InlineKeyboardMarkup]:
     """Model catalog entry screen."""
-    return "Модели\nВыберите категорию или воспользуйтесь поиском.", models_categories()
+    return (
+        "Каталог моделей\n\nВыберите категорию или выполните поиск по названию.",
+        models_categories(),
+    )
 
 
 def get_profile_payload(user: User, is_admin: bool = False) -> tuple[str, InlineKeyboardMarkup]:
     """Profile screen with the token/cost breakdown."""
     model = get_model(user.model)
-    prompt = user.system_prompt or "—"
+    prompt = escape_html(user.system_prompt) if user.system_prompt else "—"
     budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
     text = (
-        f"🆔 <code>{user.user_id}</code>\n"
-        f"🧠 Модель: <b>{model.name}</b> · {model.price_str}\n"
-        f"🌡 Температура: {user.temperature:.2f}\n"
-        f"📝 Промпт: <i>{prompt}</i>\n"
-        f"📨 Запросов: {user.requests}\n"
-        f"🔢 Токены: вход {format_tokens(user.prompt_tokens)} / "
+        "Профиль\n\n"
+        f"ID: {user.user_id}\n"
+        f"Модель: {model.label}\n"
+        f"Температура: {user.temperature:.2f}\n"
+        f"Промпт: {prompt}\n\n"
+        f"Запросов: {user.requests}\n"
+        f"Токены: вход {format_tokens(user.prompt_tokens)} / "
         f"выход {format_tokens(user.completion_tokens)}\n"
-        f"🪙 Потрачено: <b>{format_cost(user.cost)}</b> · Бюджет: {budget}"
+        f"Потрачено: {format_cost(user.cost)} · Бюджет: {budget}"
     )
     return text, main_menu(is_admin)

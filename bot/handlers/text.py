@@ -30,7 +30,7 @@ async def handle_image_prompt(
     await state.clear()
     prompt = (message.text or "").strip()
     if not prompt:
-        await message.answer("✖️ Пустой запрос. Попробуйте снова.")
+        await message.answer("Пустой запрос. Попробуйте снова.")
         return
     await generate_image_and_reply(
         message=message, db=db, or_client=or_client, pricing=pricing, user=user, prompt=prompt

@@ -1,8 +1,7 @@
 """Curated OpenRouter model catalog grouped by category.
 
-Every model exposes ``price_str`` (human readable, e.g. ``"Бесплатно"`` or
-``"$0.15 / $0.60 за 1M"``), ``supports_vision`` and
-``supports_image_generation`` flags used across the UI.
+Every model exposes ``price_str`` (human readable), a compact ``price_short``
+badge and capability suffixes used across the UI.
 """
 
 from __future__ import annotations
@@ -24,23 +23,32 @@ class ModelInfo:
 
     @property
     def price_short(self) -> str:
-        """Compact price tag for buttons: ``[Free]`` or ``$in/$out``."""
+        """Compact price badge: ``[Free]``, ``[$0.14/1M]`` or ``[$0.003]``."""
         low = self.price_str.lower()
         if "беспл" in low or "free" in low:
             return "[Free]"
         amounts = re.findall(r"\$[\d.]+", self.price_str)
         if not amounts:
             return ""
-        if len(amounts) >= 2:
-            return f"{amounts[0]}/{amounts[1]}"
-        unit = "/img" if ("шт" in low or "изображ" in low) else ""
-        return f"{amounts[0]}{unit}"
+        if "шт" in low or "изображ" in low:
+            return f"[{amounts[0]}]"
+        return f"[{amounts[0]}/1M]"
 
     @property
     def label(self) -> str:
-        """Button label: short name plus a compact price tag."""
-        tag = self.price_short
-        return f"{self.name} {tag}".strip()
+        """Display name with the price badge."""
+        return f"{self.name} {self.price_short}".strip()
+
+    @property
+    def catalog_label(self) -> str:
+        """Catalog label with a capability suffix: ``[Vision]`` / ``[Img]``."""
+        if self.supports_vision:
+            cap = " [Vision]"
+        elif self.supports_image_generation:
+            cap = " [Img]"
+        else:
+            cap = ""
+        return f"{self.label}{cap}"
 
 
 @dataclass(frozen=True)
@@ -49,35 +57,37 @@ class Category:
 
     key: str
     title: str
-    icon: str
 
 
 CATEGORIES: tuple[Category, ...] = (
-    Category("fast", "Быстрые", "🚀"),
-    Category("reasoning", "Умные / Vision", "🧠"),
-    Category("image_gen", "Картинки", "🎨"),
+    Category("fast", "Быстрые"),
+    Category("reasoning", "Мультимодальные"),
+    Category("image_gen", "Изображения"),
 )
 
 MODELS: tuple[ModelInfo, ...] = (
-    # --- Fast / cheap ---
-    ModelInfo("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "fast", "$0.14 / $0.28 за 1M"),
-    ModelInfo("deepseek/deepseek-v4.1-flash:free", "DeepSeek V4.1 Flash", "fast", "Бесплатно"),
+    # --- Fast ---
+    ModelInfo("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1", "fast", "$0.14 / $0.28 за 1M"),
+    ModelInfo("deepseek/deepseek-v4.1-flash:free", "DeepSeek V4.1", "fast", "Бесплатно"),
     ModelInfo("mimo/mimo-2.6-flash", "MiMo 2.6 Flash", "fast", "$0.10 / $0.30 за 1M"),
     ModelInfo("qwen/qwen-2.5-72b-instruct", "Qwen 2.5 72B", "fast", "$0.35 / $0.40 за 1M"),
     ModelInfo(
         "qwen/qwen-3-vl", "Qwen 3 VL", "fast", "$0.20 / $0.60 за 1M", supports_vision=True
     ),
-    # --- Smart / multimodal (vision + reasoning) ---
+    # --- Multimodal / reasoning ---
     ModelInfo(
         "nvidia/nemotron-3.5-super-vl:free",
-        "Nemotron 3.5 Super VL",
+        "Nemotron 3.5 VL",
         "reasoning",
         "Бесплатно",
         supports_vision=True,
     ),
     ModelInfo("dots-studio/dots3-note-preview:free", "Dots3 Note", "reasoning", "Бесплатно"),
     ModelInfo(
-        "deepseek/deepseek-v4.1-reasoner", "DeepSeek V4.1 Reasoner", "reasoning", "$0.55 / $2.20 за 1M"
+        "deepseek/deepseek-v4.1-reasoner",
+        "DeepSeek V4.1 Reasoner",
+        "reasoning",
+        "$0.55 / $2.20 за 1M",
     ),
     # --- Image generation ---
     ModelInfo(

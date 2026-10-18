@@ -38,7 +38,7 @@ class ConcurrencyMiddleware(BaseMiddleware):
 
     def __init__(self, guard: ConcurrencyGuard, notice: str | None = None) -> None:
         self._guard = guard
-        self._notice = notice or "⏳ Дождитесь завершения текущего ответа, затем повторите."
+        self._notice = notice or "Дождитесь завершения текущего запроса."
 
     async def __call__(
         self,

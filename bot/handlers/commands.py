@@ -16,22 +16,26 @@ from bot.ui import HELP_TEXT, get_main_menu_payload, get_models_payload, get_pro
 router = Router(name="commands")
 
 
-async def send_main_menu(message: Message, user: User, is_admin: bool) -> None:
+async def send_main_menu(message: Message, user: User, is_admin: bool, db: Database) -> None:
     """Render the main screen through the shared payload builder."""
-    text, markup = get_main_menu_payload(user, is_admin)
+    text, markup = get_main_menu_payload(user, is_admin, await db.count_messages(user.user_id))
     await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, user: User, is_admin: bool) -> None:
+async def cmd_start(
+    message: Message, state: FSMContext, db: Database, user: User, is_admin: bool
+) -> None:
     await state.clear()
-    await send_main_menu(message, user, is_admin)
+    await send_main_menu(message, user, is_admin, db)
 
 
 @router.message(Command("menu"))
-async def cmd_menu(message: Message, state: FSMContext, user: User, is_admin: bool) -> None:
+async def cmd_menu(
+    message: Message, state: FSMContext, db: Database, user: User, is_admin: bool
+) -> None:
     await state.clear()
-    await send_main_menu(message, user, is_admin)
+    await send_main_menu(message, user, is_admin, db)
 
 
 @router.message(Command("help"))
@@ -55,6 +59,6 @@ async def cmd_model(message: Message) -> None:
 async def cmd_reset(message: Message, db: Database, user: User, is_admin: bool) -> None:
     removed = await db.clear_history(user.user_id)
     await message.answer(
-        f"Контекст очищен ({removed} сообщений).",
+        f"Контекст очищен ({removed}).",
         reply_markup=main_menu(is_admin),
     )

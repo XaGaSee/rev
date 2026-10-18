@@ -21,6 +21,7 @@ from bot.keyboards.inline import (
     cost_menu,
     describe_category,
     image_models_keyboard,
+    main_menu,
     models_list,
     search_results,
     settings_menu,
@@ -45,9 +46,7 @@ async def _edit(callback: CallbackQuery, text: str, markup=None) -> None:
     if not isinstance(callback.message, Message):
         return
     try:
-        await callback.message.edit_text(
-            text, parse_mode=ParseMode.HTML, reply_markup=markup
-        )
+        await callback.message.edit_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc).lower():
             logger.debug("Callback edit failed: %s", exc)
@@ -58,27 +57,30 @@ async def _cost_text(user: User, pricing: PricingService) -> str:
     model = get_model(user.model)
     budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
     lines = [
-        f"🧠 Модель: <b>{model.name}</b>",
-        f"💲 Тариф: {model.price_str}",
-        f"📥 Ввод: {format_price_per_million(prompt_price)} / 1M",
-        f"📤 Вывод: {format_price_per_million(completion_price)} / 1M",
+        "Бюджет и расходы\n",
+        f"Модель: {model.label}",
+        f"Тариф: {model.price_str}",
+        f"Ввод: {format_price_per_million(prompt_price)} / 1M токенов",
+        f"Выход: {format_price_per_million(completion_price)} / 1M токенов",
     ]
     if model.supports_image_generation:
-        lines.append(f"🖼 Изображение: {format_cost(image_price)} / шт")
+        lines.append(f"Изображение: {format_cost(image_price)} / шт")
     lines += [
         "",
-        f"💸 Потрачено: <b>{format_cost(user.cost)}</b> · Лимит: {budget}",
-        "ℹ️ При достижении лимита генерация блокируется.",
+        f"Потрачено: {format_cost(user.cost)} · Лимит: {budget}",
+        "При достижении лимита генерация приостанавливается.",
     ]
     return "\n".join(lines)
 
 
 # --------------------------------------------------------------------- menu
 @router.callback_query(F.data == "menu:main")
-async def cb_main(callback: CallbackQuery, state: FSMContext, user: User, is_admin: bool) -> None:
+async def cb_main(
+    callback: CallbackQuery, state: FSMContext, db: Database, user: User, is_admin: bool
+) -> None:
     await callback.answer()
     await state.clear()
-    text, markup = get_main_menu_payload(user, is_admin)
+    text, markup = get_main_menu_payload(user, is_admin, await db.count_messages(user.user_id))
     await _edit(callback, text, markup)
 
 
@@ -98,18 +100,17 @@ async def cb_profile(callback: CallbackQuery, state: FSMContext, user: User, is_
 
 
 @router.callback_query(F.data == "menu:settings")
-async def cb_settings(
-    callback: CallbackQuery, state: FSMContext, user: User
-) -> None:
+async def cb_settings(callback: CallbackQuery, state: FSMContext, user: User) -> None:
     await callback.answer()
     await state.clear()
     model = get_model(user.model)
     budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
     text = (
-        f"🧠 Модель: <b>{model.name}</b>\n"
-        f"🌡 Температура: {user.temperature:.2f}\n"
-        f"📝 Промпт: <i>{escape_html(user.system_prompt) if user.system_prompt else '—'}</i>\n"
-        f"🪙 Потрачено: {format_cost(user.cost)} · Лимит: {budget}"
+        "Настройки\n\n"
+        f"Модель: {model.label}\n"
+        f"Температура: {user.temperature:.2f}\n"
+        f"Промпт: {escape_html(user.system_prompt) if user.system_prompt else '—'}\n\n"
+        f"Потрачено: {format_cost(user.cost)} · Лимит: {budget}"
     )
     await _edit(callback, text, settings_menu())
 
@@ -125,11 +126,7 @@ async def cb_models(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data == "menu:context_reset")
 async def cb_reset_prompt(callback: CallbackQuery) -> None:
     await callback.answer()
-    await _edit(
-        callback,
-        "Очистить контекст диалога?",
-        confirm_reset(),
-    )
+    await _edit(callback, "Очистить контекст диалога?", confirm_reset())
 
 
 @router.callback_query(F.data == "menu:image")
@@ -139,7 +136,7 @@ async def cb_image(callback: CallbackQuery, state: FSMContext, user: User) -> No
         model = get_model(user.model)
         await _edit(
             callback,
-            f"🖼 Текущая модель <b>{model.name}</b> не поддерживает генерацию изображений.\n"
+            f"Модель {model.label} не поддерживает генерацию изображений.\n"
             "Выберите модель для рисования:",
             image_models_keyboard(user.model),
         )
@@ -147,7 +144,7 @@ async def cb_image(callback: CallbackQuery, state: FSMContext, user: User) -> No
     await state.set_state(ImageStates.prompt)
     await _edit(
         callback,
-        "Опишите, что нарисовать (используется выбранная модель).",
+        "Опишите изображение, которое нужно сгенерировать.",
         cancel(),
     )
 
@@ -159,7 +156,7 @@ async def cb_admin(callback: CallbackQuery, state: FSMContext, is_admin: bool) -
         return
     await callback.answer()
     await state.clear()
-    await _edit(callback, "Админка", admin_menu())
+    await _edit(callback, "Админ-панель", admin_menu())
 
 
 # ------------------------------------------------------------------- models
@@ -172,14 +169,14 @@ async def cb_model_category(callback: CallbackQuery, user: User) -> None:
     await callback.answer()
     await _edit(
         callback,
-        f"{describe_category(category)}\nВыбери модель:",
+        f"{describe_category(category)}\n\nВыберите модель:",
         models_list(category, 0, user.model),
     )
 
 
 @router.callback_query(F.data.startswith("models:page:"))
 async def cb_model_page(callback: CallbackQuery, user: User) -> None:
-    _, _, category, page_raw = callback.data.split(":", 3)  # type: ignore[union-attr]
+    _, _, page_raw, category = callback.data.split(":", 3)  # type: ignore[union-attr]
     try:
         page = int(page_raw)
     except ValueError:
@@ -187,7 +184,7 @@ async def cb_model_page(callback: CallbackQuery, user: User) -> None:
     await callback.answer()
     await _edit(
         callback,
-        f"{describe_category(category)}\nВыбери модель:",
+        f"{describe_category(category)}\n\nВыберите модель:",
         models_list(category, page, user.model),
     )
 
@@ -201,8 +198,8 @@ async def cb_model_set(
     await db.set_model(user.user_id, info.id)
     user.model = info.id
     await state.clear()
-    await callback.answer(f"Модель: {info.name} {info.price_short}")
-    text, markup = get_main_menu_payload(user, is_admin)
+    await callback.answer(f"Модель: {info.name}")
+    text, markup = get_main_menu_payload(user, is_admin, await db.count_messages(user.user_id))
     await _edit(callback, text, markup)
 
 
@@ -212,7 +209,7 @@ async def cb_model_search(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ModelStates.WaitForModelSearch)
     await _edit(
         callback,
-        "Поиск модели\nНапишите фрагмент названия, например <code>deepseek</code>.",
+        "Поиск модели\n\nВведите название или его фрагмент.",
         cancel("menu:models"),
     )
 
@@ -226,12 +223,12 @@ async def cb_model_search_page(callback: CallbackQuery, user: User) -> None:
         page = 0
     items = search_models(query)
     if not items:
-        await callback.answer("Результаты устарели, выполните поиск заново", show_alert=True)
+        await callback.answer("Результаты устарели. Выполните поиск заново.", show_alert=True)
         return
     await callback.answer()
     await _edit(
         callback,
-        f"Поиск: <code>{escape_html(query)}</code> — найдено {len(items)}",
+        f"Поиск: {escape_html(query)} — найдено {len(items)}",
         search_results(items, page, user.model, query),
     )
 
@@ -245,14 +242,14 @@ async def do_model_search(message: Message, state: FSMContext, user: User) -> No
     items = search_models(query)
     if not items:
         await message.answer(
-            f"По запросу <code>{escape_html(query)}</code> ничего не найдено.",
+            f"По запросу «{escape_html(query)}» ничего не найдено.",
             parse_mode=ParseMode.HTML,
             reply_markup=cancel("menu:models"),
         )
         return
     await state.clear()
     await message.answer(
-        f"Поиск: <code>{escape_html(query)}</code> — найдено {len(items)}",
+        f"Поиск: {escape_html(query)} — найдено {len(items)}",
         parse_mode=ParseMode.HTML,
         reply_markup=search_results(items, 0, user.model, query),
     )
@@ -265,7 +262,7 @@ async def cb_settings_temp(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(SettingsStates.temperature)
     await _edit(
         callback,
-        "Температура (0.0–2.0)\nОтправьте число, например <code>0.7</code>.",
+        "Температура\n\nВведите значение от 0.0 до 2.0 (например, 0.7).",
         cancel("menu:settings"),
     )
 
@@ -276,7 +273,7 @@ async def cb_settings_prompt(callback: CallbackQuery, state: FSMContext) -> None
     await state.set_state(SettingsStates.system_prompt)
     await _edit(
         callback,
-        "Системный промпт\nОтправьте текст — он задаст роль и стиль модели.",
+        "Системный промпт\n\nВведите текст, который определит роль и стиль модели.",
         cancel("menu:settings"),
     )
 
@@ -296,28 +293,30 @@ async def cb_budget(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(SettingsStates.budget)
     await _edit(
         callback,
-        "💰 <b>Бюджет</b>\n\n"
-        "Отправьте сумму в USD (например <code>0.5</code>),\n"
-        "или <code>0</code>, чтобы снять лимит.",
+        "Бюджет\n\nВведите сумму в USD (например, 0.5) или 0, чтобы снять лимит.",
         cancel("settings:cost"),
     )
 
 
 @router.callback_query(F.data == "settings:budget_toggle")
 async def cb_budget_toggle(
-    callback: CallbackQuery, state: FSMContext, db: Database, user: User, pricing: PricingService
+    callback: CallbackQuery,
+    state: FSMContext,
+    db: Database,
+    user: User,
+    pricing: PricingService,
 ) -> None:
     if user.budget > 0:
         await db.set_budget(user.user_id, 0.0)
         user.budget = 0.0
-        await callback.answer("✅ Лимит отключён")
+        await callback.answer("Лимит отключён")
         await _edit(callback, await _cost_text(user, pricing), cost_menu(user.budget))
         return
     await callback.answer()
     await state.set_state(SettingsStates.budget)
     await _edit(
         callback,
-        "💰 <b>Бюджет</b>\n\nВведите сумму в USD, например <code>0.5</code>.",
+        "Бюджет\n\nВведите сумму в USD (например, 0.5).",
         cancel("settings:cost"),
     )
 
@@ -325,12 +324,8 @@ async def cb_budget_toggle(
 @router.callback_query(F.data == "reset:confirm")
 async def cb_reset_confirm(callback: CallbackQuery, db: Database, user: User) -> None:
     removed = await db.clear_history(user.user_id)
-    await callback.answer(f"Удалено: {removed}")
-    await _edit(
-        callback,
-        f"Контекст очищен ({removed}).",
-        back_to_menu(),
-    )
+    await callback.answer("Контекст очищен")
+    await _edit(callback, f"Контекст очищен ({removed}).", back_to_menu())
 
 
 # --------------------------------------------------------- FSM text handlers
@@ -340,16 +335,15 @@ async def set_temperature(message: Message, state: FSMContext, db: Database, use
     try:
         value = float(raw)
     except ValueError:
-        await message.answer("⚠️ Введите число, например 0.7")
+        await message.answer("Введите число от 0.0 до 2.0 (например, 0.7).")
         return
     if not 0.0 <= value <= 2.0:
-        await message.answer("⚠️ Значение должно быть в диапазоне 0.0 – 2.0")
+        await message.answer("Допустимый диапазон: 0.0 — 2.0.")
         return
     await db.set_temperature(user.user_id, value)
     await state.clear()
     await message.answer(
-        f"✅ Температура сохранена: <b>{value:.2f}</b>",
-        parse_mode=ParseMode.HTML,
+        f"Температура сохранена: {value:.2f}",
         reply_markup=settings_menu(),
     )
 
@@ -359,11 +353,7 @@ async def set_system_prompt(message: Message, state: FSMContext, db: Database, u
     prompt = (message.text or "").strip()
     await db.set_system_prompt(user.user_id, prompt or None)
     await state.clear()
-    await message.answer(
-        "✅ Системный промпт сохранён.",
-        parse_mode=ParseMode.HTML,
-        reply_markup=settings_menu(),
-    )
+    await message.answer("Системный промпт сохранён.", reply_markup=settings_menu())
 
 
 @router.message(SettingsStates.budget, F.text)
@@ -374,17 +364,16 @@ async def set_budget(
     try:
         value = float(raw)
     except ValueError:
-        await message.answer("⚠️ Введите сумму в USD, например 0.5 (или 0 для снятия лимита).")
+        await message.answer("Введите сумму в USD (например, 0.5) или 0, чтобы снять лимит.")
         return
     if value < 0:
-        await message.answer("⚠️ Сумма не может быть отрицательной.")
+        await message.answer("Сумма не может быть отрицательной.")
         return
     await db.set_budget(user.user_id, value)
     user.budget = value
     await state.clear()
-    summary = await _cost_text(user, pricing)
     await message.answer(
-        summary,
+        await _cost_text(user, pricing),
         parse_mode=ParseMode.HTML,
         reply_markup=cost_menu(user.budget),
     )

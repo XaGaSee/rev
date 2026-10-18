@@ -50,20 +50,19 @@ async def handle_photo(
     if not is_vision_model(user.model):
         model = get_model(user.model)
         await message.answer(
-            f"👁 Модель <b>{model.name}</b> не анализирует изображения.\n"
+            f"Модель {model.label} не поддерживает анализ изображений.\n"
             "Выберите vision-модель:",
-            parse_mode=ParseMode.HTML,
             reply_markup=vision_models_keyboard(user.model),
         )
         return
 
-    caption = (message.caption or "Опиши подробно, что изображено на этом фото.").strip()
+    caption = (message.caption or "Опишите содержимое изображения.").strip()
     largest = message.photo[-1]
     try:
         raw = await _download(message.bot, largest.file_id)
     except (TelegramBadRequest, ValueError) as exc:
         logger.warning("Failed to download photo: %s", exc)
-        await message.answer("⚠️ Не удалось загрузить изображение. Попробуйте ещё раз.")
+        await message.answer("Не удалось загрузить изображение. Попробуйте ещё раз.")
         return
 
     await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
@@ -91,24 +90,25 @@ async def handle_voice(
     voice = message.voice
     assert voice is not None
     if voice.file_size and voice.file_size > _MAX_VOICE_BYTES:
-        await message.answer("⚠️ Голосовое сообщение слишком большое (лимит 20 МБ).")
+        await message.answer("Голосовое сообщение превышает лимит 20 МБ.")
         return
     if user.user_id not in settings.admin_ids and not await db.has_daily_quota(
         user.user_id, settings.daily_message_limit
     ):
         limit = settings.daily_message_limit
         await message.answer(
-            f"Дневной лимит исчерпан ({limit}/{limit} сообщений). Лимит обновится завтра."
+            f"Суточный лимит запросов исчерпан ({limit}/{limit}). "
+            "Обновление доступа произойдет в 00:00 UTC."
         )
         return
     try:
         raw = await _download(message.bot, voice.file_id)
     except (TelegramBadRequest, ValueError) as exc:
         logger.warning("Failed to download voice: %s", exc)
-        await message.answer("⚠️ Не удалось загрузить голосовое сообщение.")
+        await message.answer("Не удалось загрузить голосовое сообщение.")
         return
 
-    status = await message.answer("🎙 <i>Распознаю речь…</i>", parse_mode=ParseMode.HTML)
+    status = await message.answer("Распознавание речи…")
     await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
 
     try:
@@ -128,7 +128,7 @@ async def handle_voice(
 
     try:
         await status.edit_text(
-            f"🎙 <b>Распознано:</b>\n<i>{escape_html(transcript)}</i>",
+            f"Расшифровка: {escape_html(transcript)}",
             parse_mode=ParseMode.HTML,
         )
     except (TelegramBadRequest, TelegramRetryAfter):

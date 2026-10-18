@@ -34,17 +34,29 @@ router.callback_query.filter(F.from_user.id.in_(settings.admin_ids))  # type: ig
 async def _stats_text(db: Database) -> str:
     stats = await db.get_stats()
     return (
-        f"👥 Пользователей: {stats.users} · сегодня: {stats.active_today}\n"
-        f"📨 Запросов: {format_tokens(stats.requests)}\n"
-        f"🔢 Токены: вход {format_tokens(stats.prompt_tokens)} / "
+        "Статистика\n\n"
+        f"Пользователи: {stats.users} · сегодня: {stats.active_today}\n"
+        f"Запросы: {format_tokens(stats.requests)}\n"
+        f"Токены: вход {format_tokens(stats.prompt_tokens)} / "
         f"выход {format_tokens(stats.completion_tokens)}\n"
-        f"🪙 Расход: <b>{format_cost(stats.cost)}</b>"
+        f"Расход: {format_cost(stats.cost)}"
     )
+
+
+async def _refresh_pricing_text(pricing: PricingService) -> str:
+    """Refresh the price table and render the result message."""
+    try:
+        count = await pricing.refresh()
+    except Exception:  # noqa: BLE001
+        logger.exception("Pricing refresh failed")
+        return "Не удалось обновить прайс-лист. Попробуйте позже."
+    updated = await pricing.last_updated()
+    return f"Прайс-лист обновлён. Моделей: {count}. Время: {updated or '—'}."
 
 
 @router.message(Command("admin"))
 async def cmd_admin(message: Message) -> None:
-    await message.answer("Админка", reply_markup=admin_menu())
+    await message.answer("Админ-панель", reply_markup=admin_menu())
 
 
 @router.message(Command("stats"))
@@ -64,18 +76,21 @@ async def cmd_reset_limit(message: Message, db: Database) -> None:
 
 @router.message(Command("pricing"))
 async def cmd_pricing(message: Message, pricing: PricingService) -> None:
-    status = await message.answer("Обновляю прайс-лист…", parse_mode=ParseMode.HTML)
-    try:
-        count = await pricing.refresh()
-    except Exception:  # noqa: BLE001
-        logger.exception("Pricing refresh failed")
-        await status.edit_text("Не удалось обновить прайс-лист. Попробуйте позже.")
+    status = await message.answer("Обновление прайс-листа…")
+    await status.edit_text(await _refresh_pricing_text(pricing))
+
+
+@router.callback_query(F.data == "admin:pricing")
+async def cb_pricing(callback: CallbackQuery, pricing: PricingService) -> None:
+    await callback.answer()
+    if not isinstance(callback.message, Message):
         return
-    updated = await pricing.last_updated()
-    await status.edit_text(
-        f"Прайс-лист обновлён: моделей {count}, время <code>{updated or '—'}</code>",
-        parse_mode=ParseMode.HTML,
-    )
+    try:
+        await callback.message.edit_text(
+            await _refresh_pricing_text(pricing), reply_markup=admin_menu()
+        )
+    except TelegramBadRequest:
+        pass
 
 
 @router.callback_query(F.data == "admin:stats")
@@ -99,8 +114,7 @@ async def cb_broadcast(callback: CallbackQuery, state: FSMContext) -> None:
         return
     try:
         await callback.message.edit_text(
-            "Рассылка\n\nОтправьте текст сообщения для всех пользователей (HTML).",
-            parse_mode=ParseMode.HTML,
+            "Рассылка\n\nОтправьте текст сообщения для всех пользователей.",
             reply_markup=cancel("menu:admin"),
         )
     except TelegramBadRequest:
@@ -134,6 +148,6 @@ async def do_broadcast(message: Message, state: FSMContext, db: Database) -> Non
         await asyncio.sleep(0.1)
 
     await message.answer(
-        f"Рассылка завершена: доставлено {sent}, ошибок {failed}.",
+        f"Рассылка завершена. Доставлено: {sent}, ошибок: {failed}.",
         reply_markup=back_to_menu(),
     )

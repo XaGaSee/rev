@@ -28,12 +28,12 @@ from bot.services.pricing import PricingService
 logger = logging.getLogger(__name__)
 
 BOT_COMMANDS = [
-    BotCommand(command="start", description="🏠 Главное меню"),
-    BotCommand(command="menu", description="📋 Меню"),
-    BotCommand(command="model", description="⚙️ Выбрать модель"),
-    BotCommand(command="profile", description="👤 Профиль"),
-    BotCommand(command="reset", description="🧹 Очистить контекст"),
-    BotCommand(command="help", description="❓ Помощь"),
+    BotCommand(command="start", description="Главное меню"),
+    BotCommand(command="menu", description="Навигация"),
+    BotCommand(command="model", description="Каталог моделей"),
+    BotCommand(command="profile", description="Профиль и статистика"),
+    BotCommand(command="reset", description="Очистить контекст"),
+    BotCommand(command="help", description="Справка"),
 ]
 
 
@@ -43,9 +43,9 @@ async def on_error(event: ErrorEvent) -> None:
     update = event.update
     try:
         if update.message is not None:
-            await update.message.answer("⚠️ Произошла внутренняя ошибка. Мы уже чиним её.")
+            await update.message.answer("Внутренняя ошибка. Попробуйте позже.")
         elif update.callback_query is not None:
-            await update.callback_query.answer("⚠️ Внутренняя ошибка", show_alert=True)
+            await update.callback_query.answer("Внутренняя ошибка. Попробуйте позже.", show_alert=True)
     except Exception:  # noqa: BLE001
         logger.debug("Failed to notify user about the error")
 

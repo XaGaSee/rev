@@ -27,7 +27,7 @@ from bot.services.openrouter import (
 )
 from bot.services.pricing import PricingService, format_cost
 from bot.services.tokens import estimate_messages_tokens, estimate_tokens, fit_messages
-from bot.utils.text import markdown_to_html, split_html
+from bot.utils.text import escape_html, markdown_to_html, split_html
 
 logger = logging.getLogger(__name__)
 
@@ -120,8 +120,8 @@ async def ensure_daily_limit(message: Message, db: Database, user: User) -> bool
     if allowed:
         return True
     await message.answer(
-        f"Дневной лимит исчерпан ({used}/{settings.daily_message_limit} сообщений). "
-        "Лимит обновится завтра."
+        f"Суточный лимит запросов исчерпан ({used}/{settings.daily_message_limit}). "
+        "Обновление доступа произойдет в 00:00 UTC."
     )
     return False
 
@@ -143,7 +143,7 @@ async def generate_and_reply(
     if user.budget_exceeded:
         await message.answer(
             f"Достигнут лимит бюджета ({format_cost(user.budget)}). "
-            "Измените лимит в настройках или очистите его."
+            "Измените лимит в настройках."
         )
         return
 
@@ -158,7 +158,7 @@ async def generate_and_reply(
         stored_user = user_text
     await db.add_message(user.user_id, "user", stored_user)
 
-    placeholder = await message.answer("⏳ <i>Генерирую ответ…</i>", parse_mode=ParseMode.HTML)
+    placeholder = await message.answer("Генерация ответа…")
     bot = message.bot
     chat_id = message.chat.id
 
@@ -197,7 +197,7 @@ async def generate_and_reply(
         return
 
     if not collected.strip():
-        await _safe_edit(placeholder, "🤷 Модель вернула пустой ответ.")
+        await _safe_edit(placeholder, "Модель вернула пустой ответ. Переформулируйте запрос.")
         return
 
     await _render_answer(bot, chat_id, placeholder, markdown_to_html(collected))
@@ -245,9 +245,8 @@ async def generate_image_and_reply(
     if not is_image_model(user.model):
         model = get_model(user.model)
         await message.answer(
-            f"🖼 Текущая модель <b>{model.name}</b> не поддерживает генерацию изображений.\n"
+            f"Модель {model.label} не поддерживает генерацию изображений.\n"
             "Выберите модель для рисования:",
-            parse_mode=ParseMode.HTML,
             reply_markup=image_models_keyboard(user.model),
         )
         return
@@ -258,11 +257,11 @@ async def generate_image_and_reply(
     if user.budget_exceeded:
         await message.answer(
             f"Достигнут лимит бюджета ({format_cost(user.budget)}). "
-            "Измените лимит в настройках или очистите его."
+            "Измените лимит в настройках."
         )
         return
 
-    placeholder = await message.answer("🎨 Генерирую изображение…", parse_mode=ParseMode.HTML)
+    placeholder = await message.answer("Генерация изображения…")
     bot = message.bot
     chat_id = message.chat.id
 
@@ -287,7 +286,7 @@ async def generate_image_and_reply(
             caption = None
             markup = None
             if index == len(urls) - 1:
-                caption = f"🎨 <b>{_TAG_STRIP.sub('', prompt)[:200]}</b>"
+                caption = escape_html(_TAG_STRIP.sub("", prompt)[:200])
                 markup = image_actions()
             await message.answer_photo(
                 photo,
@@ -300,10 +299,10 @@ async def generate_image_and_reply(
             await _safe_send(bot, chat_id, exc.user_message)
         except TelegramBadRequest as exc:
             logger.warning("Telegram rejected image: %s", exc)
-            await _safe_send(bot, chat_id, "⚠️ Не удалось отправить изображение.")
+            await _safe_send(bot, chat_id, "Не удалось отправить изображение.")
 
     if delivered == 0:
-        await _safe_edit(placeholder, "🤷 Не удалось получить изображение.")
+        await _safe_edit(placeholder, "Не удалось получить изображение.")
         return
 
     try:

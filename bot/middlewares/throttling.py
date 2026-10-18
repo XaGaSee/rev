@@ -43,9 +43,9 @@ class ThrottlingMiddleware(BaseMiddleware):
 
         if now - last < threshold:
             if is_callback and isinstance(event, CallbackQuery):
-                await event.answer("⏳ Слишком быстро, подождите секунду…", show_alert=False)
+                await event.answer("Подождите секунду.", show_alert=False)
             elif isinstance(event, Message):
-                await event.answer("⏳ Слишком много запросов. Немного подождите.")
+                await event.answer("Превышен лимит запросов. Повторите позже.")
             return None
 
         self._last_seen[user.id] = now

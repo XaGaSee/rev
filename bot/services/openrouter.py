@@ -17,33 +17,31 @@ ChatMessage = Mapping[str, Any]
 class OpenRouterError(Exception):
     """Base class for OpenRouter integration failures."""
 
-    user_message = "⚠️ Не удалось получить ответ от модели. Попробуйте позже."
+    user_message = "Не удалось выполнить запрос. Попробуйте позже."
 
 
 class AuthError(OpenRouterError):
-    user_message = "🔒 Ошибка авторизации OpenRouter. Проверьте API-ключ."
+    user_message = "Ошибка авторизации API. Проверьте ключ OpenRouter."
 
 
 class InsufficientCreditsError(OpenRouterError):
-    user_message = "💳 Недостаточно кредитов на балансе OpenRouter. Пополните счёт и повторите."
+    user_message = "Недостаточно кредитов на балансе OpenRouter. Пополните счёт."
 
 
 class RateLimitError(OpenRouterError):
-    user_message = "⏳ Достигнут лимит запросов. Подождите немного и повторите."
+    user_message = "Превышен лимит запросов. Повторите через несколько секунд."
 
 
 class UpstreamError(OpenRouterError):
-    user_message = "🛠 Сервис модели временно недоступен. Попробуйте позже."
+    user_message = "Сервис модели временно недоступен. Попробуйте позже."
 
 
 class NetworkError(OpenRouterError):
-    user_message = "🌐 Проблема с сетью. Проверьте соединение и повторите."
+    user_message = "Ошибка сети. Проверьте соединение и повторите запрос."
 
 
 class BadRequestError(OpenRouterError):
-    user_message = (
-        "🚫 Запрос отклонён моделью. Возможно, выбранная модель не поддерживает такой ввод."
-    )
+    user_message = "Запрос отклонён моделью. Возможно, этот ввод не поддерживается."
 
 
 @dataclass(slots=True)
