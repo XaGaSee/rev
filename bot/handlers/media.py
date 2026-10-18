@@ -10,12 +10,12 @@ from aiogram.enums import ChatAction, ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import Message
 
-from bot.config import settings
 from bot.catalog import get_model, is_vision_model
+from bot.config import settings
 from bot.database.db import Database
 from bot.database.models import User
 from bot.handlers.common import generate_and_reply
-from bot.keyboards.inline import models_categories
+from bot.keyboards.inline import vision_models_keyboard
 from bot.services.audio import voice_filename
 from bot.services.image import bytes_to_data_url, guess_mime
 from bot.services.openrouter import OpenRouterClient, OpenRouterError
@@ -48,13 +48,12 @@ async def handle_photo(
 ) -> None:
     """Analyse an image using a vision-capable model."""
     if not is_vision_model(user.model):
+        model = get_model(user.model)
         await message.answer(
-            "👁️ Текущая модель <b>{}</b> не умеет анализировать изображения.\n"
-            "Выберите модель из категории «Анализ изображений».".format(
-                get_model(user.model).name
-            ),
+            f"👁 Модель <b>{model.name}</b> не анализирует изображения.\n"
+            "Выберите vision-модель:",
             parse_mode=ParseMode.HTML,
-            reply_markup=models_categories(),
+            reply_markup=vision_models_keyboard(user.model),
         )
         return
 
@@ -94,8 +93,8 @@ async def handle_voice(
     if voice.file_size and voice.file_size > _MAX_VOICE_BYTES:
         await message.answer("⚠️ Голосовое сообщение слишком большое (лимит 20 МБ).")
         return
-    if user.id not in settings.admin_ids and not await db.has_daily_quota(
-        user.id, settings.daily_message_limit
+    if user.user_id not in settings.admin_ids and not await db.has_daily_quota(
+        user.user_id, settings.daily_message_limit
     ):
         limit = settings.daily_message_limit
         await message.answer(
@@ -121,7 +120,10 @@ async def handle_voice(
             filename=voice_filename(voice.file_unique_id),
         )
     except OpenRouterError as exc:
-        await status.edit_text(exc.user_message)
+        try:
+            await status.edit_text(exc.user_message, parse_mode=ParseMode.HTML)
+        except (TelegramBadRequest, TelegramRetryAfter):
+            pass
         return
 
     try:

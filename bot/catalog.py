@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -22,7 +21,6 @@ class ModelInfo:
     price_str: str
     supports_vision: bool = False
     supports_image_generation: bool = False
-    description: str = ""
 
     @property
     def price_short(self) -> str:
@@ -60,40 +58,14 @@ CATEGORIES: tuple[Category, ...] = (
     Category("image_gen", "Картинки", "🎨"),
 )
 
-CATEGORY_MAP: dict[str, Category] = {c.key: c for c in CATEGORIES}
-
 MODELS: tuple[ModelInfo, ...] = (
     # --- Fast / cheap ---
+    ModelInfo("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "fast", "$0.14 / $0.28 за 1M"),
+    ModelInfo("deepseek/deepseek-v4.1-flash:free", "DeepSeek V4.1 Flash", "fast", "Бесплатно"),
+    ModelInfo("mimo/mimo-2.6-flash", "MiMo 2.6 Flash", "fast", "$0.10 / $0.30 за 1M"),
+    ModelInfo("qwen/qwen-2.5-72b-instruct", "Qwen 2.5 72B", "fast", "$0.35 / $0.40 за 1M"),
     ModelInfo(
-        "deepseek/deepseek-v4.1-flash",
-        "DeepSeek V4.1 Flash",
-        "fast",
-        "$0.14 / $0.28 за 1M",
-    ),
-    ModelInfo(
-        "deepseek/deepseek-v4.1-flash:free",
-        "DeepSeek V4.1 Flash",
-        "fast",
-        "Бесплатно",
-    ),
-    ModelInfo(
-        "mimo/mimo-2.6-flash",
-        "MiMo 2.6 Flash",
-        "fast",
-        "$0.10 / $0.30 за 1M",
-    ),
-    ModelInfo(
-        "qwen/qwen-2.5-72b-instruct",
-        "Qwen 2.5 72B",
-        "fast",
-        "$0.35 / $0.40 за 1M",
-    ),
-    ModelInfo(
-        "qwen/qwen-3-vl",
-        "Qwen 3 VL",
-        "fast",
-        "$0.20 / $0.60 за 1M",
-        supports_vision=True,
+        "qwen/qwen-3-vl", "Qwen 3 VL", "fast", "$0.20 / $0.60 за 1M", supports_vision=True
     ),
     # --- Smart / multimodal (vision + reasoning) ---
     ModelInfo(
@@ -102,20 +74,10 @@ MODELS: tuple[ModelInfo, ...] = (
         "reasoning",
         "Бесплатно",
         supports_vision=True,
-        description="1M контекст, vision",
     ),
+    ModelInfo("dots-studio/dots3-note-preview:free", "Dots3 Note", "reasoning", "Бесплатно"),
     ModelInfo(
-        "dots-studio/dots3-note-preview:free",
-        "Dots3 Note",
-        "reasoning",
-        "Бесплатно",
-        description="512K контекст",
-    ),
-    ModelInfo(
-        "deepseek/deepseek-v4.1-reasoner",
-        "DeepSeek V4.1 Reasoner",
-        "reasoning",
-        "$0.55 / $2.20 за 1M",
+        "deepseek/deepseek-v4.1-reasoner", "DeepSeek V4.1 Reasoner", "reasoning", "$0.55 / $2.20 за 1M"
     ),
     # --- Image generation ---
     ModelInfo(
@@ -164,14 +126,14 @@ def image_models() -> list[ModelInfo]:
     return models_by_category("image_gen")
 
 
+def vision_models() -> list[ModelInfo]:
+    """Return every model that accepts image inputs."""
+    return [m for m in MODELS if m.supports_vision]
+
+
 def search_models(query: str) -> list[ModelInfo]:
     """Case-insensitive search over model id and name."""
     needle = query.strip().lower()
     if not needle:
         return []
     return [m for m in MODELS if needle in m.id.lower() or needle in m.name.lower()]
-
-
-def iter_models() -> Iterable[ModelInfo]:
-    """Iterate over every catalogued model."""
-    return iter(MODELS)

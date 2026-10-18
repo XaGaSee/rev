@@ -7,7 +7,11 @@ import logging
 
 from aiogram import F, Router
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramRetryAfter,
+)
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -60,17 +64,16 @@ async def cmd_reset_limit(message: Message, db: Database) -> None:
 
 @router.message(Command("pricing"))
 async def cmd_pricing(message: Message, pricing: PricingService) -> None:
-    status = await message.answer("🔄 Обновляю прайс-лист OpenRouter…", parse_mode=ParseMode.HTML)
+    status = await message.answer("Обновляю прайс-лист…", parse_mode=ParseMode.HTML)
     try:
         count = await pricing.refresh()
-    except Exception as exc:  # noqa: BLE001
-        await status.edit_text(f"⚠️ Не удалось обновить прайс: {exc}", parse_mode=ParseMode.HTML)
+    except Exception:  # noqa: BLE001
+        logger.exception("Pricing refresh failed")
+        await status.edit_text("Не удалось обновить прайс-лист. Попробуйте позже.")
         return
     updated = await pricing.last_updated()
     await status.edit_text(
-        "🪙 <b>Прайс-лист обновлён</b>\n"
-        f"Моделей: <b>{count}</b>\n"
-        f"Время: <code>{updated or '—'}</code>",
+        f"Прайс-лист обновлён: моделей {count}, время <code>{updated or '—'}</code>",
         parse_mode=ParseMode.HTML,
     )
 
@@ -78,22 +81,30 @@ async def cmd_pricing(message: Message, pricing: PricingService) -> None:
 @router.callback_query(F.data == "admin:stats")
 async def cb_stats(callback: CallbackQuery, db: Database) -> None:
     await callback.answer()
-    if callback.message:
-        await callback.message.edit_text(  # type: ignore[union-attr]
+    if not isinstance(callback.message, Message):
+        return
+    try:
+        await callback.message.edit_text(
             await _stats_text(db), parse_mode=ParseMode.HTML, reply_markup=admin_menu()
         )
+    except TelegramBadRequest:
+        pass
 
 
 @router.callback_query(F.data == "admin:broadcast")
 async def cb_broadcast(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await state.set_state(AdminStates.broadcast)
-    if callback.message:
-        await callback.message.edit_text(  # type: ignore[union-attr]
+    if not isinstance(callback.message, Message):
+        return
+    try:
+        await callback.message.edit_text(
             "Рассылка\n\nОтправьте текст сообщения для всех пользователей (HTML).",
             parse_mode=ParseMode.HTML,
             reply_markup=cancel("menu:admin"),
         )
+    except TelegramBadRequest:
+        pass
 
 
 @router.message(AdminStates.broadcast, F.text)

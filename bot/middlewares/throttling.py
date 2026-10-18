@@ -16,6 +16,14 @@ class ThrottlingMiddleware(BaseMiddleware):
         self._rate = rate
         self._last_seen: dict[int, float] = {}
 
+    def _prune(self, now: float) -> None:
+        """Drop stale entries so the map cannot grow without bound."""
+        if len(self._last_seen) < 10_000:
+            return
+        stale = [uid for uid, ts in self._last_seen.items() if now - ts > 60.0]
+        for uid in stale:
+            self._last_seen.pop(uid, None)
+
     async def __call__(
         self,
         handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
@@ -27,6 +35,7 @@ class ThrottlingMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         now = time.monotonic()
+        self._prune(now)
         last = self._last_seen.get(user.id, 0.0)
 
         is_callback = isinstance(event, CallbackQuery)

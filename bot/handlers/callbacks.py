@@ -13,7 +13,6 @@ from aiogram.types import CallbackQuery, Message
 from bot.catalog import CATEGORIES, get_model, is_image_model, search_models
 from bot.database.db import Database
 from bot.database.models import User
-from bot.handlers.commands import HELP_TEXT
 from bot.keyboards.inline import (
     admin_menu,
     back_to_menu,
@@ -22,15 +21,18 @@ from bot.keyboards.inline import (
     cost_menu,
     describe_category,
     image_models_keyboard,
-    main_menu,
-    models_categories,
     models_list,
     search_results,
     settings_menu,
 )
 from bot.services.pricing import PricingService, format_cost, format_price_per_million
-from bot.services.tokens import format_tokens
 from bot.states import ImageStates, ModelStates, SettingsStates
+from bot.ui import (
+    HELP_TEXT,
+    get_main_menu_payload,
+    get_models_payload,
+    get_profile_payload,
+)
 from bot.utils.text import escape_html
 
 logger = logging.getLogger(__name__)
@@ -49,30 +51,6 @@ async def _edit(callback: CallbackQuery, text: str, markup=None) -> None:
     except TelegramBadRequest as exc:
         if "message is not modified" not in str(exc).lower():
             logger.debug("Callback edit failed: %s", exc)
-
-
-def _main_menu_text(user: User) -> str:
-    model = get_model(user.model)
-    return (
-        f"Модель: <b>{model.name}</b> · {model.price_str}\n"
-        "Напишите сообщение или выберите действие."
-    )
-
-
-def _profile_text(user: User) -> str:
-    model = get_model(user.model)
-    prompt = escape_html(user.system_prompt) if user.system_prompt else "—"
-    budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
-    return (
-        f"🆔 <code>{user.user_id}</code>\n"
-        f"🧠 Модель: <b>{model.name}</b> · {model.price_str}\n"
-        f"🌡 Температура: {user.temperature:.2f}\n"
-        f"📝 Промпт: <i>{prompt}</i>\n"
-        f"📨 Запросов: {user.requests}\n"
-        f"🔢 Токены: вход {format_tokens(user.prompt_tokens)} / "
-        f"выход {format_tokens(user.completion_tokens)}\n"
-        f"🪙 Потрачено: <b>{format_cost(user.cost)}</b> · Бюджет: {budget}"
-    )
 
 
 async def _cost_text(user: User, pricing: PricingService) -> str:
@@ -97,26 +75,34 @@ async def _cost_text(user: User, pricing: PricingService) -> str:
 
 # --------------------------------------------------------------------- menu
 @router.callback_query(F.data == "menu:main")
-async def cb_main(callback: CallbackQuery, user: User, is_admin: bool) -> None:
+async def cb_main(callback: CallbackQuery, state: FSMContext, user: User, is_admin: bool) -> None:
     await callback.answer()
-    await _edit(callback, _main_menu_text(user), main_menu(is_admin))
+    await state.clear()
+    text, markup = get_main_menu_payload(user, is_admin)
+    await _edit(callback, text, markup)
 
 
 @router.callback_query(F.data == "menu:help")
-async def cb_help(callback: CallbackQuery, is_admin: bool) -> None:
+async def cb_help(callback: CallbackQuery, state: FSMContext, is_admin: bool) -> None:
     await callback.answer()
+    await state.clear()
     await _edit(callback, HELP_TEXT, main_menu(is_admin))
 
 
 @router.callback_query(F.data == "menu:profile")
-async def cb_profile(callback: CallbackQuery, user: User, is_admin: bool) -> None:
+async def cb_profile(callback: CallbackQuery, state: FSMContext, user: User, is_admin: bool) -> None:
     await callback.answer()
-    await _edit(callback, _profile_text(user), main_menu(is_admin))
+    await state.clear()
+    text, markup = get_profile_payload(user, is_admin)
+    await _edit(callback, text, markup)
 
 
 @router.callback_query(F.data == "menu:settings")
-async def cb_settings(callback: CallbackQuery, user: User) -> None:
+async def cb_settings(
+    callback: CallbackQuery, state: FSMContext, user: User
+) -> None:
     await callback.answer()
+    await state.clear()
     model = get_model(user.model)
     budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
     text = (
@@ -129,13 +115,11 @@ async def cb_settings(callback: CallbackQuery, user: User) -> None:
 
 
 @router.callback_query(F.data == "menu:models")
-async def cb_models(callback: CallbackQuery) -> None:
+async def cb_models(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
-    await _edit(
-        callback,
-        "Модели\nВыберите категорию или воспользуйтесь поиском.",
-        models_categories(),
-    )
+    await state.clear()
+    text, markup = get_models_payload()
+    await _edit(callback, text, markup)
 
 
 @router.callback_query(F.data == "menu:context_reset")
@@ -169,11 +153,12 @@ async def cb_image(callback: CallbackQuery, state: FSMContext, user: User) -> No
 
 
 @router.callback_query(F.data == "menu:admin")
-async def cb_admin(callback: CallbackQuery, is_admin: bool) -> None:
+async def cb_admin(callback: CallbackQuery, state: FSMContext, is_admin: bool) -> None:
     if not is_admin:
-        await callback.answer("⛔️ Недоступно", show_alert=True)
+        await callback.answer("Недоступно", show_alert=True)
         return
     await callback.answer()
+    await state.clear()
     await _edit(callback, "Админка", admin_menu())
 
 
@@ -213,11 +198,12 @@ async def cb_model_set(
 ) -> None:
     model_id = callback.data.split(":", 2)[2]  # type: ignore[union-attr]
     info = get_model(model_id)
-    await db.set_model(user.id, info.id)
+    await db.set_model(user.user_id, info.id)
     user.model = info.id
     await state.clear()
-    await callback.answer(f"✅ Модель: {info.name} {info.price_short}")
-    await _edit(callback, _main_menu_text(user), main_menu(is_admin))
+    await callback.answer(f"Модель: {info.name} {info.price_short}")
+    text, markup = get_main_menu_payload(user, is_admin)
+    await _edit(callback, text, markup)
 
 
 @router.callback_query(F.data == "models:search")
@@ -232,25 +218,21 @@ async def cb_model_search(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("models:spage:"))
-async def cb_model_search_page(
-    callback: CallbackQuery, state: FSMContext, user: User
-) -> None:
-    _, _, page_raw = callback.data.split(":", 2)  # type: ignore[union-attr]
+async def cb_model_search_page(callback: CallbackQuery, user: User) -> None:
+    _, _, page_raw, query = callback.data.split(":", 3)  # type: ignore[union-attr]
     try:
         page = int(page_raw)
     except ValueError:
         page = 0
-    data = await state.get_data()
-    query = str(data.get("query", ""))
     items = search_models(query)
     if not items:
-        await callback.answer("Ничего не найдено", show_alert=True)
+        await callback.answer("Результаты устарели, выполните поиск заново", show_alert=True)
         return
     await callback.answer()
     await _edit(
         callback,
         f"Поиск: <code>{escape_html(query)}</code> — найдено {len(items)}",
-        search_results(items, page, user.model),
+        search_results(items, page, user.model, query),
     )
 
 
@@ -268,11 +250,11 @@ async def do_model_search(message: Message, state: FSMContext, user: User) -> No
             reply_markup=cancel("menu:models"),
         )
         return
-    await state.update_data(query=query)
+    await state.clear()
     await message.answer(
         f"Поиск: <code>{escape_html(query)}</code> — найдено {len(items)}",
         parse_mode=ParseMode.HTML,
-        reply_markup=search_results(items, 0, user.model),
+        reply_markup=search_results(items, 0, user.model, query),
     )
 
 
@@ -300,8 +282,11 @@ async def cb_settings_prompt(callback: CallbackQuery, state: FSMContext) -> None
 
 
 @router.callback_query(F.data == "settings:cost")
-async def cb_cost(callback: CallbackQuery, user: User, pricing: PricingService) -> None:
+async def cb_cost(
+    callback: CallbackQuery, state: FSMContext, user: User, pricing: PricingService
+) -> None:
     await callback.answer()
+    await state.clear()
     await _edit(callback, await _cost_text(user, pricing), cost_menu(user.budget))
 
 
@@ -323,7 +308,7 @@ async def cb_budget_toggle(
     callback: CallbackQuery, state: FSMContext, db: Database, user: User, pricing: PricingService
 ) -> None:
     if user.budget > 0:
-        await db.set_budget(user.id, 0.0)
+        await db.set_budget(user.user_id, 0.0)
         user.budget = 0.0
         await callback.answer("✅ Лимит отключён")
         await _edit(callback, await _cost_text(user, pricing), cost_menu(user.budget))
@@ -339,7 +324,7 @@ async def cb_budget_toggle(
 
 @router.callback_query(F.data == "reset:confirm")
 async def cb_reset_confirm(callback: CallbackQuery, db: Database, user: User) -> None:
-    removed = await db.clear_history(user.id)
+    removed = await db.clear_history(user.user_id)
     await callback.answer(f"Удалено: {removed}")
     await _edit(
         callback,
@@ -360,7 +345,7 @@ async def set_temperature(message: Message, state: FSMContext, db: Database, use
     if not 0.0 <= value <= 2.0:
         await message.answer("⚠️ Значение должно быть в диапазоне 0.0 – 2.0")
         return
-    await db.set_temperature(user.id, value)
+    await db.set_temperature(user.user_id, value)
     await state.clear()
     await message.answer(
         f"✅ Температура сохранена: <b>{value:.2f}</b>",
@@ -372,7 +357,7 @@ async def set_temperature(message: Message, state: FSMContext, db: Database, use
 @router.message(SettingsStates.system_prompt, F.text)
 async def set_system_prompt(message: Message, state: FSMContext, db: Database, user: User) -> None:
     prompt = (message.text or "").strip()
-    await db.set_system_prompt(user.id, prompt or None)
+    await db.set_system_prompt(user.user_id, prompt or None)
     await state.clear()
     await message.answer(
         "✅ Системный промпт сохранён.",
@@ -394,10 +379,12 @@ async def set_budget(
     if value < 0:
         await message.answer("⚠️ Сумма не может быть отрицательной.")
         return
-    await db.set_budget(user.id, value)
+    await db.set_budget(user.user_id, value)
     user.budget = value
     await state.clear()
-    notice = "✅ Лимит снят." if value == 0 else f"✅ Бюджет установлен: {format_cost(value)}"
-    await message.answer(notice, parse_mode=ParseMode.HTML)
-    await message.answer(await _cost_text(user, pricing), parse_mode=ParseMode.HTML,
-                         reply_markup=cost_menu(user.budget))
+    summary = await _cost_text(user, pricing)
+    await message.answer(
+        summary,
+        parse_mode=ParseMode.HTML,
+        reply_markup=cost_menu(user.budget),
+    )

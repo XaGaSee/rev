@@ -97,12 +97,6 @@ async def main() -> None:
 
     dp.errors.register(on_error)
 
-    async def on_shutdown() -> None:
-        await or_client.close()
-        await db.close()
-
-    dp.shutdown.register(on_shutdown)
-
     await bot.set_my_commands(BOT_COMMANDS)
     await bot.delete_webhook(drop_pending_updates=True)
 
@@ -119,7 +113,8 @@ async def main() -> None:
         await dp.start_polling(bot)
     finally:
         pricing_task.cancel()
-        await on_shutdown()
+        await or_client.close()
+        await db.close()
         await bot.session.close()
 
 

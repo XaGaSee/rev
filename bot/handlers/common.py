@@ -109,9 +109,9 @@ async def ensure_daily_limit(message: Message, db: Database, user: User) -> bool
 
     Returns ``True`` when the request may proceed.
     """
-    if user.id in settings.admin_ids:
+    if user.user_id in settings.admin_ids:
         return True
-    allowed, used = await db.consume_daily_message(user.id, settings.daily_message_limit)
+    allowed, used = await db.consume_daily_message(user.user_id, settings.daily_message_limit)
     if allowed:
         return True
     await message.answer(
@@ -142,7 +142,7 @@ async def generate_and_reply(
         )
         return
 
-    history = await db.get_history(user.id, settings.max_history_messages)
+    history = await db.get_history(user.user_id, settings.max_history_messages)
     messages = _build_messages(user, history, user_text, image_urls)
 
     if image_urls and user_text:
@@ -151,7 +151,7 @@ async def generate_and_reply(
         stored_user = "[изображение]"
     else:
         stored_user = user_text
-    await db.add_message(user.id, "user", stored_user)
+    await db.add_message(user.user_id, "user", stored_user)
 
     placeholder = await message.answer("⏳ <i>Генерирую ответ…</i>", parse_mode=ParseMode.HTML)
     bot = message.bot
@@ -196,10 +196,16 @@ async def generate_and_reply(
         return
 
     await _render_answer(bot, chat_id, placeholder, markdown_to_html(collected))
-    await db.add_message(user.id, "assistant", collected)
+    await db.add_message(user.user_id, "assistant", collected)
 
-    prompt_tokens = usage.prompt_tokens if usage else estimate_messages_tokens(list(messages))
-    completion_tokens = usage.completion_tokens if usage else estimate_tokens(collected)
+    prompt_tokens = (
+        usage.prompt_tokens
+        if usage and usage.prompt_tokens
+        else estimate_messages_tokens(list(messages))
+    )
+    completion_tokens = (
+        usage.completion_tokens if usage and usage.completion_tokens else estimate_tokens(collected)
+    )
     total_tokens = (
         usage.total_tokens
         if usage and usage.total_tokens
@@ -212,7 +218,7 @@ async def generate_and_reply(
         usage.cost if usage else None,
     )
     await db.increment_usage(
-        user.id,
+        user.user_id,
         requests=1,
         tokens=total_tokens,
         prompt_tokens=prompt_tokens,
@@ -277,7 +283,7 @@ async def generate_image_and_reply(
             markup = None
             if index == len(urls) - 1:
                 caption = f"🎨 <b>{_TAG_STRIP.sub('', prompt)[:200]}</b>"
-                markup = image_actions(user.model)
+                markup = image_actions()
             await message.answer_photo(
                 photo,
                 caption=caption,
@@ -300,11 +306,11 @@ async def generate_image_and_reply(
     except TelegramBadRequest:
         pass
 
-    await db.add_message(user.id, "user", f"[генерация изображения] {prompt}")
+    await db.add_message(user.user_id, "user", f"[генерация изображения] {prompt}")
     image_tokens = estimate_tokens(prompt)
     cost = await pricing.estimate_image_cost(user.model, delivered, image_tokens)
     await db.increment_usage(
-        user.id,
+        user.user_id,
         requests=1,
         tokens=image_tokens + delivered * 100,
         prompt_tokens=image_tokens,

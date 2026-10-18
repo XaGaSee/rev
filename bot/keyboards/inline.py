@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.catalog import CATEGORIES, ModelInfo, image_models, models_by_category
+from bot.catalog import CATEGORIES, ModelInfo, image_models, models_by_category, vision_models
 
 PAGE_SIZE = 6
 
@@ -63,8 +63,10 @@ def models_list(category: str, page: int, current_model: str) -> InlineKeyboardM
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def search_results(items: list[ModelInfo], page: int, current_model: str) -> InlineKeyboardMarkup:
-    """Paginated results of a model search."""
+def search_results(
+    items: list[ModelInfo], page: int, current_model: str, query: str = ""
+) -> InlineKeyboardMarkup:
+    """Paginated results of a model search (query travels in callback data)."""
     total_pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
     page = max(0, min(page, total_pages - 1))
     start = page * PAGE_SIZE
@@ -78,10 +80,10 @@ def search_results(items: list[ModelInfo], page: int, current_model: str) -> Inl
     if total_pages > 1:
         nav: list[InlineKeyboardButton] = []
         if page > 0:
-            nav.append(_btn("⬅️", f"models:spage:{page - 1}"))
-        nav.append(_btn(f"{page + 1}/{total_pages}", f"models:spage:{page}"))
+            nav.append(_btn("⬅️", f"models:spage:{page - 1}:{query[:20]}"))
+        nav.append(_btn(f"{page + 1}/{total_pages}", f"models:spage:{page}:{query[:20]}"))
         if page < total_pages - 1:
-            nav.append(_btn("➡️", f"models:spage:{page + 1}"))
+            nav.append(_btn("➡️", f"models:spage:{page + 1}:{query[:20]}"))
         rows.append(nav)
 
     rows.append([_btn("🔍 Новый поиск", "models:search"), _btn("🗂 Категории", "menu:models")])
@@ -91,11 +93,22 @@ def search_results(items: list[ModelInfo], page: int, current_model: str) -> Inl
 
 def image_models_keyboard(current_model: str = "") -> InlineKeyboardMarkup:
     """One-click switch to an image generation model."""
+    return _switch_keyboard(image_models(), current_model, "Все модели")
+
+
+def vision_models_keyboard(current_model: str = "") -> InlineKeyboardMarkup:
+    """One-click switch to a vision-capable model."""
+    return _switch_keyboard(vision_models(), current_model, "Все модели")
+
+
+def _switch_keyboard(
+    items: list[ModelInfo], current_model: str, back_label: str
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
-    for model in image_models():
+    for model in items:
         mark = "✅ " if model.id == current_model else ""
         rows.append([_btn(f"{mark}{model.label}", f"models:set:{model.id}")])
-    rows.append([_btn("🗂 Все модели", "menu:models"), _btn("🏠 В меню", "menu:main")])
+    rows.append([_btn(f"🗂 {back_label}", "menu:models"), _btn("🏠 В меню", "menu:main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -134,7 +147,7 @@ def confirm_reset() -> InlineKeyboardMarkup:
     )
 
 
-def image_actions(model_id: str) -> InlineKeyboardMarkup:
+def image_actions() -> InlineKeyboardMarkup:
     """Actions shown when a generated image is produced."""
     return InlineKeyboardMarkup(
         inline_keyboard=[

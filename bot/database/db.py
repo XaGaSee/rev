@@ -57,9 +57,13 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _today() -> str:
+def utc_today() -> str:
     """Current UTC date (daily counters roll over at midnight UTC)."""
     return datetime.now(timezone.utc).date().isoformat()
+
+
+def _today() -> str:
+    return utc_today()
 
 
 class Database:
@@ -118,6 +122,13 @@ class Database:
             await self._conn.close()
             self._conn = None
             logger.info("Database connection closed")
+
+    async def __aenter__(self) -> "Database":
+        await self.connect()
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        await self.close()
 
     # ------------------------------------------------------------------ users
     async def get_or_create_user(
@@ -272,15 +283,6 @@ class Database:
             ],
         )
         await self.connection.commit()
-
-    async def get_pricing(self, model_id: str) -> tuple[float, float, float] | None:
-        """Return ``(prompt, completion, image)`` per-unit prices or ``None``."""
-        row = await self._fetchone(
-            "SELECT prompt, completion, image FROM pricing WHERE model_id = ?", (model_id,)
-        )
-        if row is None:
-            return None
-        return float(row["prompt"]), float(row["completion"]), float(row["image"])
 
     async def get_pricing_all(self) -> dict[str, tuple[float, float, float]]:
         """Return the whole cached price table."""

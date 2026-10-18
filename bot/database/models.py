@@ -27,15 +27,6 @@ class User:
     last_active: str
 
     @property
-    def display_name(self) -> str:
-        """Best-effort display name for greetings."""
-        if self.first_name:
-            return self.first_name
-        if self.username:
-            return f"@{self.username}"
-        return str(self.user_id)
-
-    @property
     def budget_exceeded(self) -> bool:
         """Whether the user spent their whole budget (0 means unlimited)."""
         return self.budget > 0 and self.cost >= self.budget

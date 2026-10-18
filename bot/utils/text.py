@@ -35,44 +35,6 @@ def markdown_to_html(text: str) -> str:
     return escaped
 
 
-def split_message(text: str, limit: int = TELEGRAM_MESSAGE_LIMIT) -> list[str]:
-    """Split *text* into chunks not exceeding *limit* characters.
-
-    Splitting prefers paragraph, then line, then word boundaries.
-    """
-    if len(text) <= limit:
-        return [text]
-
-    chunks: list[str] = []
-    remaining = text
-    while remaining:
-        if len(remaining) <= limit:
-            chunks.append(remaining)
-            break
-
-        window = remaining[:limit]
-        split_at = window.rfind("\n\n")
-        if split_at < limit // 2:
-            split_at = window.rfind("\n")
-        if split_at < limit // 2:
-            split_at = window.rfind(" ")
-        if split_at <= 0:
-            split_at = limit
-
-        chunks.append(remaining[:split_at].rstrip())
-        remaining = remaining[split_at:].lstrip("\n")
-
-    return chunks
-
-
-def truncate(text: str, length: int = 60) -> str:
-    """Truncate *text* adding an ellipsis if needed."""
-    text = " ".join(text.split())
-    if len(text) <= length:
-        return text
-    return text[: length - 1].rstrip() + "…"
-
-
 def _is_closing(tag_token: str) -> bool:
     return tag_token.startswith("</")
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from bot.catalog import is_image_model
@@ -19,7 +20,7 @@ router = Router(name="text")
 @router.message(ImageStates.prompt, F.text)
 async def handle_image_prompt(
     message: Message,
-    state,
+    state: FSMContext,
     db: Database,
     or_client: OpenRouterClient,
     pricing: PricingService,
