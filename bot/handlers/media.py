@@ -94,6 +94,14 @@ async def handle_voice(
     if voice.file_size and voice.file_size > _MAX_VOICE_BYTES:
         await message.answer("⚠️ Голосовое сообщение слишком большое (лимит 20 МБ).")
         return
+    if user.id not in settings.admin_ids and not await db.has_daily_quota(
+        user.id, settings.daily_message_limit
+    ):
+        limit = settings.daily_message_limit
+        await message.answer(
+            f"Дневной лимит исчерпан ({limit}/{limit} сообщений). Лимит обновится завтра."
+        )
+        return
     try:
         raw = await _download(message.bot, voice.file_id)
     except (TelegramBadRequest, ValueError) as exc:

@@ -104,6 +104,23 @@ def _build_messages(user: User, history, user_text: str, image_urls: list[str] |
     return fit_messages(list(messages), settings.max_context_tokens)
 
 
+async def ensure_daily_limit(message: Message, db: Database, user: User) -> bool:
+    """Enforce the per-user daily generation cap (admins are unlimited).
+
+    Returns ``True`` when the request may proceed.
+    """
+    if user.id in settings.admin_ids:
+        return True
+    allowed, used = await db.consume_daily_message(user.id, settings.daily_message_limit)
+    if allowed:
+        return True
+    await message.answer(
+        f"Дневной лимит исчерпан ({used}/{settings.daily_message_limit} сообщений). "
+        "Лимит обновится завтра."
+    )
+    return False
+
+
 async def generate_and_reply(
     *,
     message: Message,
@@ -115,10 +132,13 @@ async def generate_and_reply(
     image_urls: list[str] | None = None,
 ) -> None:
     """Build the prompt, stream the answer and persist the turn."""
+    if not await ensure_daily_limit(message, db, user):
+        return
+
     if user.budget_exceeded:
         await message.answer(
-            f"🚫 Достигнут лимит бюджета ({format_cost(user.budget)}). "
-            "Измените лимит в настройках или очистите его.",
+            f"Достигнут лимит бюджета ({format_cost(user.budget)}). "
+            "Измените лимит в настройках или очистите его."
         )
         return
 
@@ -191,9 +211,14 @@ async def generate_and_reply(
         completion_tokens,
         usage.cost if usage else None,
     )
-    await db.increment_usage(user.id, requests=1, tokens=total_tokens)
-    if cost > 0:
-        await db.add_cost(user.id, cost)
+    await db.increment_usage(
+        user.id,
+        requests=1,
+        tokens=total_tokens,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        cost=cost,
+    )
 
 
 async def generate_image_and_reply(
@@ -216,14 +241,17 @@ async def generate_image_and_reply(
         )
         return
 
+    if not await ensure_daily_limit(message, db, user):
+        return
+
     if user.budget_exceeded:
         await message.answer(
-            f"🚫 Достигнут лимит бюджета ({format_cost(user.budget)}). "
-            "Измените лимит в настройках или очистите его.",
+            f"Достигнут лимит бюджета ({format_cost(user.budget)}). "
+            "Измените лимит в настройках или очистите его."
         )
         return
 
-    placeholder = await message.answer("🎨 <i>Генерирую изображение…</i>", parse_mode=ParseMode.HTML)
+    placeholder = await message.answer("🎨 Генерирую изображение…", parse_mode=ParseMode.HTML)
     bot = message.bot
     chat_id = message.chat.id
 
@@ -275,6 +303,11 @@ async def generate_image_and_reply(
     await db.add_message(user.id, "user", f"[генерация изображения] {prompt}")
     image_tokens = estimate_tokens(prompt)
     cost = await pricing.estimate_image_cost(user.model, delivered, image_tokens)
-    await db.increment_usage(user.id, requests=1, tokens=image_tokens + delivered * 100)
-    if cost > 0:
-        await db.add_cost(user.id, cost)
+    await db.increment_usage(
+        user.id,
+        requests=1,
+        tokens=image_tokens + delivered * 100,
+        prompt_tokens=image_tokens,
+        completion_tokens=0,
+        cost=cost,
+    )

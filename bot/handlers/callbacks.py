@@ -54,32 +54,24 @@ async def _edit(callback: CallbackQuery, text: str, markup=None) -> None:
 def _main_menu_text(user: User) -> str:
     model = get_model(user.model)
     return (
-        f"🏠 <b>Главное меню</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🧠 Модель: <b>{model.name}</b> · {model.price_str}\n"
-        f"📨 Запросов: <b>{user.requests}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Выбери действие или просто напиши сообщение ✍️"
+        f"Модель: <b>{model.name}</b> · {model.price_str}\n"
+        "Напишите сообщение или выберите действие."
     )
 
 
 def _profile_text(user: User) -> str:
     model = get_model(user.model)
-    prompt = escape_html(user.system_prompt) if user.system_prompt else "— (не задан)"
+    prompt = escape_html(user.system_prompt) if user.system_prompt else "—"
     budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
     return (
-        "👤 <b>Профиль</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🆔 ID: <code>{user.user_id}</code>\n"
-        f"🧠 Модель: <b>{model.name}</b>\n"
-        f"💰 Цена: <b>{model.price_str}</b>\n"
-        f"🌡 Температура: <b>{user.temperature:.2f}</b>\n"
+        f"🆔 <code>{user.user_id}</code>\n"
+        f"🧠 Модель: <b>{model.name}</b> · {model.price_str}\n"
+        f"🌡 Температура: {user.temperature:.2f}\n"
         f"📝 Промпт: <i>{prompt}</i>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"📨 Запросов: <b>{user.requests}</b>\n"
-        f"🔢 Токенов (≈): <b>{format_tokens(user.tokens)}</b>\n"
-        f"🪙 Потрачено: <b>{format_cost(user.cost)}</b>\n"
-        f"💰 Бюджет: <b>{budget}</b>"
+        f"📨 Запросов: {user.requests}\n"
+        f"🔢 Токены: вход {format_tokens(user.prompt_tokens)} / "
+        f"выход {format_tokens(user.completion_tokens)}\n"
+        f"🪙 Потрачено: <b>{format_cost(user.cost)}</b> · Бюджет: {budget}"
     )
 
 
@@ -88,21 +80,17 @@ async def _cost_text(user: User, pricing: PricingService) -> str:
     model = get_model(user.model)
     budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
     lines = [
-        "🪙 <b>Стоимость и бюджет</b>",
-        "━━━━━━━━━━━━━━━━━━━━",
         f"🧠 Модель: <b>{model.name}</b>",
-        f"💲 Тариф: <b>{model.price_str}</b>",
-        f"📥 Ввод: <b>{format_price_per_million(prompt_price)}</b> / 1M токенов",
-        f"📤 Вывод: <b>{format_price_per_million(completion_price)}</b> / 1M токенов",
+        f"💲 Тариф: {model.price_str}",
+        f"📥 Ввод: {format_price_per_million(prompt_price)} / 1M",
+        f"📤 Вывод: {format_price_per_million(completion_price)} / 1M",
     ]
     if model.supports_image_generation:
-        lines.append(f"🖼 Изображение: <b>{format_cost(image_price)}</b> / шт")
+        lines.append(f"🖼 Изображение: {format_cost(image_price)} / шт")
     lines += [
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"💸 Потрачено всего: <b>{format_cost(user.cost)}</b>",
-        f"💰 Лимит: <b>{budget}</b>",
         "",
-        "ℹ️ Цены OpenRouter. При достижении лимита генерация блокируется.",
+        f"💸 Потрачено: <b>{format_cost(user.cost)}</b> · Лимит: {budget}",
+        "ℹ️ При достижении лимита генерация блокируется.",
     ]
     return "\n".join(lines)
 
@@ -132,12 +120,10 @@ async def cb_settings(callback: CallbackQuery, user: User) -> None:
     model = get_model(user.model)
     budget = format_cost(user.budget) if user.budget > 0 else "без лимита"
     text = (
-        "🧠 <b>Настройки модели</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"🧠 Модель: <b>{model.name}</b> ({model.price_str})\n"
-        f"🌡 Текущая температура: <b>{user.temperature:.2f}</b>\n"
+        f"🧠 Модель: <b>{model.name}</b>\n"
+        f"🌡 Температура: {user.temperature:.2f}\n"
         f"📝 Промпт: <i>{escape_html(user.system_prompt) if user.system_prompt else '—'}</i>\n"
-        f"🪙 Потрачено: <b>{format_cost(user.cost)}</b> (лимит: {budget})"
+        f"🪙 Потрачено: {format_cost(user.cost)} · Лимит: {budget}"
     )
     await _edit(callback, text, settings_menu())
 
@@ -147,7 +133,7 @@ async def cb_models(callback: CallbackQuery) -> None:
     await callback.answer()
     await _edit(
         callback,
-        "⚙️ <b>Выбор модели</b>\nВыбери категорию:",
+        "Модели\nВыберите категорию или воспользуйтесь поиском.",
         models_categories(),
     )
 
@@ -157,7 +143,7 @@ async def cb_reset_prompt(callback: CallbackQuery) -> None:
     await callback.answer()
     await _edit(
         callback,
-        "🧹 <b>Очистить контекст?</b>\nВся история диалога будет удалена.",
+        "Очистить контекст диалога?",
         confirm_reset(),
     )
 
@@ -177,9 +163,7 @@ async def cb_image(callback: CallbackQuery, state: FSMContext, user: User) -> No
     await state.set_state(ImageStates.prompt)
     await _edit(
         callback,
-        "🎨 <b>Генерация изображения</b>\n\n"
-        "Опишите, что нужно нарисовать, и отправьте сообщение.\n"
-        "Для генерации будет использована выбранная модель.",
+        "Опишите, что нарисовать (используется выбранная модель).",
         cancel(),
     )
 
@@ -190,7 +174,7 @@ async def cb_admin(callback: CallbackQuery, is_admin: bool) -> None:
         await callback.answer("⛔️ Недоступно", show_alert=True)
         return
     await callback.answer()
-    await _edit(callback, "🛡 <b>Админ-панель</b>", admin_menu())
+    await _edit(callback, "Админка", admin_menu())
 
 
 # ------------------------------------------------------------------- models
@@ -242,9 +226,7 @@ async def cb_model_search(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ModelStates.WaitForModelSearch)
     await _edit(
         callback,
-        "🔍 <b>Поиск модели</b>\n\n"
-        "Напишите название или фрагмент, например <code>deepseek</code>, "
-        "<code>qwen</code> или <code>flux</code>.",
+        "Поиск модели\nНапишите фрагмент названия, например <code>deepseek</code>.",
         cancel("menu:models"),
     )
 
@@ -267,8 +249,7 @@ async def cb_model_search_page(
     await callback.answer()
     await _edit(
         callback,
-        f"🔍 <b>Поиск:</b> <code>{escape_html(query)}</code>\n"
-        f"Найдено: <b>{len(items)}</b>",
+        f"Поиск: <code>{escape_html(query)}</code> — найдено {len(items)}",
         search_results(items, page, user.model),
     )
 
@@ -277,21 +258,19 @@ async def cb_model_search_page(
 async def do_model_search(message: Message, state: FSMContext, user: User) -> None:
     query = (message.text or "").strip()
     if len(query) < 2:
-        await message.answer("⚠️ Введите минимум 2 символа для поиска.")
+        await message.answer("Введите минимум 2 символа.")
         return
     items = search_models(query)
     if not items:
         await message.answer(
-            f"🔍 По запросу <code>{escape_html(query)}</code> ничего не найдено.\n"
-            "Попробуйте другое название.",
+            f"По запросу <code>{escape_html(query)}</code> ничего не найдено.",
             parse_mode=ParseMode.HTML,
             reply_markup=cancel("menu:models"),
         )
         return
     await state.update_data(query=query)
     await message.answer(
-        f"🔍 <b>Поиск:</b> <code>{escape_html(query)}</code>\n"
-        f"Найдено: <b>{len(items)}</b>",
+        f"Поиск: <code>{escape_html(query)}</code> — найдено {len(items)}",
         parse_mode=ParseMode.HTML,
         reply_markup=search_results(items, 0, user.model),
     )
@@ -304,9 +283,7 @@ async def cb_settings_temp(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(SettingsStates.temperature)
     await _edit(
         callback,
-        "🌡 <b>Температура</b>\n\n"
-        "Отправьте число от <b>0.0</b> до <b>2.0</b>.\n"
-        "Меньше — точнее и суше, больше — креативнее.",
+        "Температура (0.0–2.0)\nОтправьте число, например <code>0.7</code>.",
         cancel("menu:settings"),
     )
 
@@ -317,21 +294,8 @@ async def cb_settings_prompt(callback: CallbackQuery, state: FSMContext) -> None
     await state.set_state(SettingsStates.system_prompt)
     await _edit(
         callback,
-        "📝 <b>Системный промпт</b>\n\n"
-        "Отправьте текст, который будет задавать роль и стиль модели.",
+        "Системный промпт\nОтправьте текст — он задаст роль и стиль модели.",
         cancel("menu:settings"),
-    )
-
-
-@router.callback_query(F.data == "settings:prompt_reset")
-async def cb_prompt_reset(callback: CallbackQuery, db: Database, user: User) -> None:
-    await db.set_system_prompt(user.id, None)
-    user.system_prompt = None
-    await callback.answer("✅ Промпт сброшен")
-    await _edit(
-        callback,
-        "🧠 <b>Настройки модели</b>\nПромпт очищен.",
-        settings_menu(),
     )
 
 
@@ -379,7 +343,7 @@ async def cb_reset_confirm(callback: CallbackQuery, db: Database, user: User) ->
     await callback.answer(f"Удалено: {removed}")
     await _edit(
         callback,
-        f"🧹 Контекст очищен. Удалено сообщений: <b>{removed}</b>.",
+        f"Контекст очищен ({removed}).",
         back_to_menu(),
     )
 

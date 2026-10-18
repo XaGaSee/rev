@@ -16,13 +16,12 @@ def _btn(text: str, data: str) -> InlineKeyboardButton:
 def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
     """Primary navigation menu."""
     rows: list[list[InlineKeyboardButton]] = [
-        [_btn("⚙️ Выбор модели", "menu:models"), _btn("🧠 Настройки", "menu:settings")],
-        [_btn("👤 Профиль", "menu:profile"), _btn("🧹 Сбросить контекст", "menu:context_reset")],
-        [_btn("🎨 Генерация изображения", "menu:image")],
-        [_btn("❓ Помощь", "menu:help")],
+        [_btn("🧠 Модели", "menu:models"), _btn("⚙️ Настройки", "menu:settings")],
+        [_btn("👤 Профиль", "menu:profile"), _btn("🧹 Сброс", "menu:context_reset")],
+        [_btn("🎨 Нарисовать", "menu:image"), _btn("❓ Помощь", "menu:help")],
     ]
     if is_admin:
-        rows.append([_btn("🛡 Админ-панель", "menu:admin")])
+        rows.append([_btn("🛡 Админка", "menu:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -105,9 +104,8 @@ def settings_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [_btn("🌡 Температура", "settings:temp")],
-            [_btn("📝 Системный промпт", "settings:prompt")],
-            [_btn("🪙 Стоимость и бюджет", "settings:cost")],
-            [_btn("🔄 Сбросить промпт", "settings:prompt_reset")],
+            [_btn("📝 Промпт", "settings:prompt")],
+            [_btn("💰 Бюджет", "settings:cost")],
             [_btn("⬅️ В меню", "menu:main")],
         ]
     )
@@ -132,9 +130,7 @@ def cancel(menu_cb: str = "menu:main") -> InlineKeyboardMarkup:
 def confirm_reset() -> InlineKeyboardMarkup:
     """Confirmation for clearing the dialog context."""
     return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [_btn("✅ Да, очистить", "reset:confirm"), _btn("✖️ Отмена", "menu:main")]
-        ]
+        inline_keyboard=[[_btn("✅ Да", "reset:confirm"), _btn("✖️ Отмена", "menu:main")]]
     )
 
 
@@ -155,8 +151,8 @@ def admin_menu() -> InlineKeyboardMarkup:
     """Admin panel buttons."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [_btn("📊 Статистика", "admin:stats")],
-            [_btn("📢 Рассылка", "admin:broadcast")],
+            [_btn("Статистика", "admin:stats")],
+            [_btn("Рассылка", "admin:broadcast")],
             [_btn("⬅️ В меню", "menu:main")],
         ]
     )

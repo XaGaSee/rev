@@ -36,7 +36,7 @@ class Settings(BaseSettings):
 
     # --- Access ---
     admin_ids_raw: str = Field("", description="Comma separated Telegram user ids")
-    daily_request_limit: int = Field(200, description="Per-user daily request cap")
+    daily_message_limit: int = Field(10, description="Per-user daily generation cap")
     throttling_rate: float = Field(0.7, description="Seconds between messages")
 
     # --- Model defaults ---

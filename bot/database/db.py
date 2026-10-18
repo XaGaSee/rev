@@ -20,12 +20,16 @@ CREATE TABLE IF NOT EXISTS users (
     model         TEXT    NOT NULL,
     temperature   REAL    NOT NULL DEFAULT 0.7,
     system_prompt TEXT,
-    requests      INTEGER NOT NULL DEFAULT 0,
-    tokens        INTEGER NOT NULL DEFAULT 0,
-    cost          REAL    NOT NULL DEFAULT 0,
-    budget        REAL    NOT NULL DEFAULT 0,
-    created_at    TEXT    NOT NULL,
-    last_active   TEXT    NOT NULL
+    requests        INTEGER NOT NULL DEFAULT 0,
+    tokens          INTEGER NOT NULL DEFAULT 0,
+    prompt_tokens   INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    cost            REAL    NOT NULL DEFAULT 0,
+    budget          REAL    NOT NULL DEFAULT 0,
+    daily_count     INTEGER NOT NULL DEFAULT 0,
+    daily_date      TEXT,
+    created_at      TEXT    NOT NULL,
+    last_active     TEXT    NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -51,6 +55,11 @@ CREATE INDEX IF NOT EXISTS idx_messages_user ON messages (user_id, id);
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _today() -> str:
+    """Current UTC date (daily counters roll over at midnight UTC)."""
+    return datetime.now(timezone.utc).date().isoformat()
 
 
 class Database:
@@ -85,6 +94,10 @@ class Database:
         additions = {
             "cost": "ALTER TABLE users ADD COLUMN cost REAL NOT NULL DEFAULT 0",
             "budget": "ALTER TABLE users ADD COLUMN budget REAL NOT NULL DEFAULT 0",
+            "prompt_tokens": "ALTER TABLE users ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0",
+            "completion_tokens": "ALTER TABLE users ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0",
+            "daily_count": "ALTER TABLE users ADD COLUMN daily_count INTEGER NOT NULL DEFAULT 0",
+            "daily_date": "ALTER TABLE users ADD COLUMN daily_date TEXT",
         }
         for column, statement in additions.items():
             if column not in columns:
@@ -158,18 +171,78 @@ class Database:
             "UPDATE users SET system_prompt = ? WHERE user_id = ?", (prompt, user_id)
         )
 
-    async def increment_usage(self, user_id: int, requests: int = 1, tokens: int = 0) -> None:
-        """Increase request/token counters for a user."""
+    async def increment_usage(
+        self,
+        user_id: int,
+        requests: int = 1,
+        tokens: int = 0,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        cost: float = 0.0,
+    ) -> None:
+        """Increase request/token counters (in/out separately) and spend."""
         await self._execute(
-            "UPDATE users SET requests = requests + ?, tokens = tokens + ? WHERE user_id = ?",
-            (requests, tokens, user_id),
+            "UPDATE users SET requests = requests + ?, tokens = tokens + ?, "
+            "prompt_tokens = prompt_tokens + ?, completion_tokens = completion_tokens + ?, "
+            "cost = cost + ? WHERE user_id = ?",
+            (requests, tokens, prompt_tokens, completion_tokens, cost, user_id),
         )
 
-    async def add_cost(self, user_id: int, amount: float) -> None:
-        """Add *amount* (USD) to a user's cumulative spend."""
-        await self._execute(
-            "UPDATE users SET cost = cost + ? WHERE user_id = ?", (amount, user_id)
+    # ------------------------------------------------------------ daily limit
+    async def has_daily_quota(self, user_id: int, limit: int) -> bool:
+        """Peek at the daily window without consuming a slot."""
+        row = await self._fetchone(
+            "SELECT daily_count, daily_date FROM users WHERE user_id = ?", (user_id,)
         )
+        if row is None:
+            return True
+        if row["daily_date"] != _today():
+            return True
+        return int(row["daily_count"] or 0) < limit
+
+    async def consume_daily_message(self, user_id: int, limit: int) -> tuple[bool, int]:
+        """Register one generation against the UTC daily window.
+
+        Returns ``(allowed, used_today)``; the counter rolls over at midnight UTC.
+        """
+        today = _today()
+        row = await self._fetchone(
+            "SELECT daily_count, daily_date FROM users WHERE user_id = ?", (user_id,)
+        )
+        if row is None:
+            return True, 0
+        count = int(row["daily_count"] or 0)
+        if row["daily_date"] != today:
+            count = 0
+        if count >= limit:
+            if row["daily_date"] != today:
+                await self._execute(
+                    "UPDATE users SET daily_date = ? WHERE user_id = ?", (today, user_id)
+                )
+            return False, count
+        count += 1
+        await self._execute(
+            "UPDATE users SET daily_count = ?, daily_date = ? WHERE user_id = ?",
+            (count, today, user_id),
+        )
+        return True, count
+
+    async def reset_daily_limit(self, user_id: int) -> bool:
+        """Zero out the daily counter for a user (admin action)."""
+        cursor = await self.connection.execute(
+            "UPDATE users SET daily_count = 0, daily_date = ? WHERE user_id = ?",
+            (_today(), user_id),
+        )
+        await self.connection.commit()
+        return bool(cursor.rowcount)
+
+    async def count_active_today(self) -> int:
+        """Number of users who generated at least one message today (UTC)."""
+        row = await self._fetchone(
+            "SELECT COUNT(*) AS n FROM users WHERE daily_date = ? AND daily_count > 0",
+            (_today(),),
+        )
+        return int(row["n"]) if row else 0
 
     async def set_budget(self, user_id: int, amount: float) -> None:
         """Set a user's spend limit in USD (0 means unlimited)."""
@@ -266,15 +339,25 @@ class Database:
         """Return global aggregated statistics."""
         row = await self._fetchone(
             "SELECT COUNT(*) AS users, COALESCE(SUM(requests), 0) AS requests, "
-            "COALESCE(SUM(tokens), 0) AS tokens, COALESCE(SUM(cost), 0) AS cost FROM users"
+            "COALESCE(SUM(tokens), 0) AS tokens, COALESCE(SUM(cost), 0) AS cost, "
+            "COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "
+            "COALESCE(SUM(completion_tokens), 0) AS completion_tokens "
+            "FROM users"
         )
+        active = await self.count_active_today()
         if row is None:
-            return Stats(users=0, requests=0, tokens=0, cost=0.0)
+            return Stats(
+                users=0, requests=0, tokens=0, cost=0.0,
+                prompt_tokens=0, completion_tokens=0, active_today=active,
+            )
         return Stats(
             users=row["users"],
             requests=row["requests"],
             tokens=row["tokens"],
             cost=float(row["cost"]),
+            prompt_tokens=row["prompt_tokens"],
+            completion_tokens=row["completion_tokens"],
+            active_today=active,
         )
 
     async def all_user_ids(self) -> list[int]:
@@ -314,8 +397,12 @@ class Database:
             system_prompt=row["system_prompt"],
             requests=row["requests"],
             tokens=row["tokens"],
+            prompt_tokens=row["prompt_tokens"],
+            completion_tokens=row["completion_tokens"],
             cost=float(row["cost"]),
             budget=float(row["budget"]),
+            daily_count=row["daily_count"],
+            daily_date=row["daily_date"],
             created_at=row["created_at"],
             last_active=row["last_active"],
         )

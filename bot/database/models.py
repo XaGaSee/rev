@@ -17,8 +17,12 @@ class User:
     system_prompt: str | None
     requests: int
     tokens: int
+    prompt_tokens: int
+    completion_tokens: int
     cost: float
     budget: float
+    daily_count: int
+    daily_date: str | None
     created_at: str
     last_active: str
 
@@ -54,3 +58,6 @@ class Stats:
     requests: int
     tokens: int
     cost: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    active_today: int = 0

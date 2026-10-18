@@ -30,23 +30,32 @@ router.callback_query.filter(F.from_user.id.in_(settings.admin_ids))  # type: ig
 async def _stats_text(db: Database) -> str:
     stats = await db.get_stats()
     return (
-        "📊 <b>Статистика</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"👥 Пользователей: <b>{stats.users}</b>\n"
-        f"📨 Запросов: <b>{stats.requests}</b>\n"
-        f"🔢 Токенов (≈): <b>{format_tokens(stats.tokens)}</b>\n"
-        f"🪙 Расходы (≈): <b>{format_cost(stats.cost)}</b>"
+        f"👥 Пользователей: {stats.users} · сегодня: {stats.active_today}\n"
+        f"📨 Запросов: {format_tokens(stats.requests)}\n"
+        f"🔢 Токены: вход {format_tokens(stats.prompt_tokens)} / "
+        f"выход {format_tokens(stats.completion_tokens)}\n"
+        f"🪙 Расход: <b>{format_cost(stats.cost)}</b>"
     )
 
 
 @router.message(Command("admin"))
 async def cmd_admin(message: Message) -> None:
-    await message.answer("🛡 <b>Админ-панель</b>", parse_mode=ParseMode.HTML, reply_markup=admin_menu())
+    await message.answer("Админка", reply_markup=admin_menu())
 
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message, db: Database) -> None:
     await message.answer(await _stats_text(db), parse_mode=ParseMode.HTML, reply_markup=admin_menu())
+
+
+@router.message(Command("resetlimit"))
+async def cmd_reset_limit(message: Message, db: Database) -> None:
+    parts = (message.text or "").split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("Использование: /resetlimit <user_id>")
+        return
+    ok = await db.reset_daily_limit(int(parts[1]))
+    await message.answer("Лимит сброшен." if ok else "Пользователь не найден.")
 
 
 @router.message(Command("pricing"))
@@ -81,8 +90,7 @@ async def cb_broadcast(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(AdminStates.broadcast)
     if callback.message:
         await callback.message.edit_text(  # type: ignore[union-attr]
-            "📢 <b>Рассылка</b>\n\nОтправьте текст сообщения для всех пользователей.\n"
-            "Поддерживается HTML-разметка.",
+            "Рассылка\n\nОтправьте текст сообщения для всех пользователей (HTML).",
             parse_mode=ParseMode.HTML,
             reply_markup=cancel("menu:admin"),
         )
@@ -112,12 +120,9 @@ async def do_broadcast(message: Message, state: FSMContext, db: Database) -> Non
         except Exception as exc:  # noqa: BLE001
             logger.warning("Broadcast to %s failed: %s", user_id, exc)
             failed += 1
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.1)
 
     await message.answer(
-        f"📢 <b>Рассылка завершена</b>\n"
-        f"✅ Доставлено: <b>{sent}</b>\n"
-        f"⚠️ Ошибок: <b>{failed}</b>",
-        parse_mode=ParseMode.HTML,
+        f"Рассылка завершена: доставлено {sent}, ошибок {failed}.",
         reply_markup=back_to_menu(),
     )

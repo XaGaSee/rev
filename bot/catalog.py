@@ -26,21 +26,21 @@ class ModelInfo:
 
     @property
     def price_short(self) -> str:
-        """Compact price tag for inline buttons, e.g. ``($0.15/1M)``."""
+        """Compact price tag for buttons: ``[Free]`` or ``$in/$out``."""
         low = self.price_str.lower()
         if "беспл" in low or "free" in low:
-            return "(Free)"
-        match = re.search(r"\$[\d.]+", self.price_str)
-        if not match:
+            return "[Free]"
+        amounts = re.findall(r"\$[\d.]+", self.price_str)
+        if not amounts:
             return ""
-        value = match.group(0)
-        if "шт" in low or "изображ" in low:
-            return f"({value}/img)"
-        return f"({value}/1M)"
+        if len(amounts) >= 2:
+            return f"{amounts[0]}/{amounts[1]}"
+        unit = "/img" if ("шт" in low or "изображ" in low) else ""
+        return f"{amounts[0]}{unit}"
 
     @property
     def label(self) -> str:
-        """Button label: name plus a compact price tag."""
+        """Button label: short name plus a compact price tag."""
         tag = self.price_short
         return f"{self.name} {tag}".strip()
 
@@ -55,9 +55,9 @@ class Category:
 
 
 CATEGORIES: tuple[Category, ...] = (
-    Category("fast", "Быстрые / Экономные", "🚀"),
-    Category("reasoning", "Умные / Мультимодальные", "🧠"),
-    Category("image_gen", "Генерация изображений", "🎨"),
+    Category("fast", "Быстрые", "🚀"),
+    Category("reasoning", "Умные / Vision", "🧠"),
+    Category("image_gen", "Картинки", "🎨"),
 )
 
 CATEGORY_MAP: dict[str, Category] = {c.key: c for c in CATEGORIES}
@@ -69,28 +69,24 @@ MODELS: tuple[ModelInfo, ...] = (
         "DeepSeek V4.1 Flash",
         "fast",
         "$0.14 / $0.28 за 1M",
-        description="Быстрая и недорогая",
     ),
     ModelInfo(
         "deepseek/deepseek-v4.1-flash:free",
         "DeepSeek V4.1 Flash",
         "fast",
         "Бесплатно",
-        description="Бесплатная версия",
     ),
     ModelInfo(
         "mimo/mimo-2.6-flash",
         "MiMo 2.6 Flash",
         "fast",
         "$0.10 / $0.30 за 1M",
-        description="Лёгкая и быстрая",
     ),
     ModelInfo(
         "qwen/qwen-2.5-72b-instruct",
         "Qwen 2.5 72B",
         "fast",
         "$0.35 / $0.40 за 1M",
-        description="Мультиязычная",
     ),
     ModelInfo(
         "qwen/qwen-3-vl",
@@ -98,30 +94,28 @@ MODELS: tuple[ModelInfo, ...] = (
         "fast",
         "$0.20 / $0.60 за 1M",
         supports_vision=True,
-        description="Vision + текст",
     ),
     # --- Smart / multimodal (vision + reasoning) ---
     ModelInfo(
         "nvidia/nemotron-3.5-super-vl:free",
-        "NVIDIA Nemotron 3.5 Super VL",
+        "Nemotron 3.5 Super VL",
         "reasoning",
         "Бесплатно",
         supports_vision=True,
-        description="Бесплатно, 1M контекст, vision",
+        description="1M контекст, vision",
     ),
     ModelInfo(
         "dots-studio/dots3-note-preview:free",
-        "Dots3 Note Preview",
+        "Dots3 Note",
         "reasoning",
         "Бесплатно",
-        description="Бесплатно, 512K контекст",
+        description="512K контекст",
     ),
     ModelInfo(
         "deepseek/deepseek-v4.1-reasoner",
         "DeepSeek V4.1 Reasoner",
         "reasoning",
         "$0.55 / $2.20 за 1M",
-        description="Пошаговые рассуждения",
     ),
     # --- Image generation ---
     ModelInfo(
@@ -130,15 +124,13 @@ MODELS: tuple[ModelInfo, ...] = (
         "image_gen",
         "$0.003 / изображение",
         supports_image_generation=True,
-        description="Быстрая генерация картинок",
     ),
     ModelInfo(
         "stabilityai/stable-diffusion-3.5-large",
-        "Stable Diffusion 3.5 Large",
+        "SD 3.5 Large",
         "image_gen",
         "$0.065 / изображение",
         supports_image_generation=True,
-        description="Качественная генерация",
     ),
 )
 
