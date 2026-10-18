@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardMarkup
 
-from bot.catalog import get_model
 from bot.config import settings
+from bot.data.catalog import get_model
 from bot.database.db import utc_today
 from bot.database.models import User
 from bot.keyboards.inline import main_menu, models_categories
@@ -43,17 +43,18 @@ def get_main_menu_payload(
 ) -> tuple[str, InlineKeyboardMarkup]:
     """Actual main-screen text and keyboard for *user*."""
     model = get_model(user.model)
-    if user.user_id in settings.admin_ids:
-        limit_line = "без ограничений (админ)"
+    if is_admin:
+        limit_line = "без ограничений (администратор)"
     else:
         used = user.daily_count if user.daily_date == utc_today() else 0
         limit_line = f"{used} / {settings.daily_message_limit} запросов (сброс в 00:00 UTC)"
+    context_state = "Контекст активен" if context_messages > 0 else "Контекст пуст"
     text = (
         "AI Assistant Gateway\n\n"
         f"Модель: {model.label}\n"
         f"Лимит: {limit_line}\n"
-        f"Контекст: {context_messages} {_plural_messages(context_messages)}\n\n"
-        "Отправьте текстовый запрос, изображение или голосовое сообщение."
+        f"Диалог: {context_messages} {_plural_messages(context_messages)} | {context_state}\n\n"
+        "Отправьте текстовое сообщение, документ, изображение или голосовую заметку."
     )
     return text, main_menu(is_admin)
 

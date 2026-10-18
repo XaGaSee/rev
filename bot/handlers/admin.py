@@ -18,7 +18,7 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.config import settings
 from bot.database.db import Database
-from bot.keyboards.inline import admin_menu, back_to_menu, cancel
+from bot.keyboards.inline import admin_menu, back_to_main, cancel
 from bot.services.pricing import PricingService, format_cost
 from bot.services.tokens import format_tokens
 from bot.states import AdminStates
@@ -149,5 +149,5 @@ async def do_broadcast(message: Message, state: FSMContext, db: Database) -> Non
 
     await message.answer(
         f"Рассылка завершена. Доставлено: {sent}, ошибок: {failed}.",
-        reply_markup=back_to_menu(),
+        reply_markup=back_to_main(),
     )

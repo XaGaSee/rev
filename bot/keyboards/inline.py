@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.catalog import CATEGORIES, ModelInfo, image_models, models_by_category, vision_models
+from bot.data.catalog import CATEGORIES, ModelInfo, image_models, models_by_category, vision_models
 
 PAGE_SIZE = 6
 
@@ -14,21 +14,19 @@ def _btn(text: str, data: str) -> InlineKeyboardButton:
 
 
 def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
-    """Primary navigation menu."""
+    """Primary navigation menu: compact two-column grid."""
     rows: list[list[InlineKeyboardButton]] = [
-        [_btn("Модели", "menu:models"), _btn("Поиск", "models:search")],
-        [_btn("Настройки", "menu:settings"), _btn("Профиль", "menu:profile")],
-        [_btn("Нарисовать", "menu:image"), _btn("Очистить диалог", "menu:context_reset")],
-        [_btn("Помощь", "menu:help")],
+        [_btn("Модели", "menu:models"), _btn("🔍 Поиск", "models:search")],
+        [_btn("Сброс контекста", "menu:context_reset"), _btn("Профиль и расход", "menu:profile")],
     ]
     if is_admin:
         rows.append([_btn("Админ-панель", "menu:admin")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def back_to_menu() -> InlineKeyboardMarkup:
+def back_to_main() -> InlineKeyboardMarkup:
     """Single button returning to the main menu."""
-    return InlineKeyboardMarkup(inline_keyboard=[[_btn("Меню", "menu:main")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[_btn("Назад", "menu:main")]])
 
 
 def models_categories() -> InlineKeyboardMarkup:

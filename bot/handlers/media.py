@@ -10,7 +10,7 @@ from aiogram.enums import ChatAction, ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import Message
 
-from bot.catalog import get_model, is_vision_model
+from bot.data.catalog import get_model, is_vision_model
 from bot.config import settings
 from bot.database.db import Database
 from bot.database.models import User
@@ -97,8 +97,8 @@ async def handle_voice(
     ):
         limit = settings.daily_message_limit
         await message.answer(
-            f"Суточный лимит запросов исчерпан ({limit}/{limit}). "
-            "Обновление доступа произойдет в 00:00 UTC."
+            f"Суточный лимит запросов ({limit}/{limit}) исчерпан. "
+            "Доступ обновится в 00:00 UTC."
         )
         return
     try:

@@ -12,7 +12,7 @@ from aiogram.enums import ChatAction, ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import BufferedInputFile, Message
 
-from bot.catalog import get_model, is_image_model
+from bot.data.catalog import is_image_model
 from bot.config import settings
 from bot.database.db import Database
 from bot.database.models import HistoryMessage, User
@@ -120,8 +120,8 @@ async def ensure_daily_limit(message: Message, db: Database, user: User) -> bool
     if allowed:
         return True
     await message.answer(
-        f"Суточный лимит запросов исчерпан ({used}/{settings.daily_message_limit}). "
-        "Обновление доступа произойдет в 00:00 UTC."
+        f"Суточный лимит запросов ({used}/{settings.daily_message_limit}) исчерпан. "
+        "Доступ обновится в 00:00 UTC."
     )
     return False
 
@@ -243,10 +243,8 @@ async def generate_image_and_reply(
 ) -> None:
     """Generate one or more images for *prompt* and deliver them."""
     if not is_image_model(user.model):
-        model = get_model(user.model)
         await message.answer(
-            f"Модель {model.label} не поддерживает генерацию изображений.\n"
-            "Выберите модель для рисования:",
+            "Текущая модель не генерирует изображения. Выберите модель для рисования:",
             reply_markup=image_models_keyboard(user.model),
         )
         return

@@ -27,7 +27,8 @@ ddm1/
 ├── bot/
 │   ├── config.py              # Настройки из .env (pydantic-settings)
 │   ├── states.py              # FSM-состояния
-│   ├── catalog.py             # Каталог моделей и категорий
+│   ├── data/
+│   │   └── catalog.py          # Каталог моделей и категорий
 │   ├── database/
 │   │   ├── db.py              # Асинхронный слой SQLite (aiosqlite)
 │   │   └── models.py          # Типизированные записи (User, Stats, ...)

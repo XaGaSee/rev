@@ -1,12 +1,12 @@
-"""Curated OpenRouter model catalog grouped by category.
+"""Curated OpenRouter model catalog (2026) grouped by category.
 
-Every model exposes ``price_str`` (human readable), a compact ``price_short``
-badge and capability suffixes used across the UI.
+Prices are USD per 1M tokens (``price_in`` / ``price_out``) or per generated
+image (``price_image``). Button labels use the compact badge format:
+``DeepSeek V4.1 [$0.14/$0.28]`` / ``NVIDIA Nemotron 3.5 Super VL [Free]``.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 
@@ -17,22 +17,34 @@ class ModelInfo:
     id: str
     name: str
     category: str
-    price_str: str
+    price_in: float = 0.0
+    price_out: float = 0.0
+    price_image: float = 0.0
     supports_vision: bool = False
     supports_image_generation: bool = False
 
     @property
+    def is_free(self) -> bool:
+        """Whether the model costs nothing to run."""
+        return self.price_in == 0 and self.price_out == 0 and self.price_image == 0
+
+    @property
+    def price_str(self) -> str:
+        """Human readable tariff line used on detail screens."""
+        if self.supports_image_generation:
+            return f"${self.price_image:g} / изображение"
+        if self.is_free:
+            return "Бесплатно"
+        return f"${self.price_in:.2f} / ${self.price_out:.2f} за 1M"
+
+    @property
     def price_short(self) -> str:
-        """Compact price badge: ``[Free]``, ``[$0.14/1M]`` or ``[$0.003]``."""
-        low = self.price_str.lower()
-        if "беспл" in low or "free" in low:
+        """Compact price badge for buttons."""
+        if self.supports_image_generation:
+            return f"[${self.price_image:g}]"
+        if self.is_free:
             return "[Free]"
-        amounts = re.findall(r"\$[\d.]+", self.price_str)
-        if not amounts:
-            return ""
-        if "шт" in low or "изображ" in low:
-            return f"[{amounts[0]}]"
-        return f"[{amounts[0]}/1M]"
+        return f"[${self.price_in:.2f}/${self.price_out:.2f}]"
 
     @property
     def label(self) -> str:
@@ -60,48 +72,38 @@ class Category:
 
 
 CATEGORIES: tuple[Category, ...] = (
-    Category("fast", "Быстрые"),
-    Category("reasoning", "Мультимодальные"),
-    Category("image_gen", "Изображения"),
+    Category("fast", "Бесплатные и быстрые"),
+    Category("reasoning", "Продвинутые рассуждения"),
+    Category("image_gen", "Генерация изображений"),
 )
 
 MODELS: tuple[ModelInfo, ...] = (
-    # --- Fast ---
-    ModelInfo("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1", "fast", "$0.14 / $0.28 за 1M"),
-    ModelInfo("deepseek/deepseek-v4.1-flash:free", "DeepSeek V4.1", "fast", "Бесплатно"),
-    ModelInfo("mimo/mimo-2.6-flash", "MiMo 2.6 Flash", "fast", "$0.10 / $0.30 за 1M"),
-    ModelInfo("qwen/qwen-2.5-72b-instruct", "Qwen 2.5 72B", "fast", "$0.35 / $0.40 за 1M"),
-    ModelInfo(
-        "qwen/qwen-3-vl", "Qwen 3 VL", "fast", "$0.20 / $0.60 за 1M", supports_vision=True
-    ),
-    # --- Multimodal / reasoning ---
+    # --- Free and fast ---
     ModelInfo(
         "nvidia/nemotron-3.5-super-vl:free",
-        "Nemotron 3.5 VL",
-        "reasoning",
-        "Бесплатно",
+        "NVIDIA Nemotron 3.5 Super VL",
+        "fast",
         supports_vision=True,
     ),
-    ModelInfo("dots-studio/dots3-note-preview:free", "Dots3 Note", "reasoning", "Бесплатно"),
-    ModelInfo(
-        "deepseek/deepseek-v4.1-reasoner",
-        "DeepSeek V4.1 Reasoner",
-        "reasoning",
-        "$0.55 / $2.20 за 1M",
-    ),
+    ModelInfo("mimo/mimo-2.6-flash", "MiMo 2.6 Flash", "fast", 0.10, 0.30),
+    ModelInfo("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1", "fast", 0.14, 0.28),
+    ModelInfo("qwen/qwen-2.5-72b-instruct", "Qwen 2.5 72B", "fast", 0.35, 0.40),
+    # --- Advanced reasoning ---
+    ModelInfo("deepseek/deepseek-v4.1-reasoner", "DeepSeek V4.1 Reasoner", "reasoning", 0.55, 2.20),
+    ModelInfo("dots-studio/dots3-note-preview:free", "Dots3 Note", "reasoning"),
     # --- Image generation ---
     ModelInfo(
         "black-forest-labs/flux-1-schnell",
         "FLUX.1 Schnell",
         "image_gen",
-        "$0.003 / изображение",
+        price_image=0.003,
         supports_image_generation=True,
     ),
     ModelInfo(
         "stabilityai/stable-diffusion-3.5-large",
         "SD 3.5 Large",
         "image_gen",
-        "$0.065 / изображение",
+        price_image=0.065,
         supports_image_generation=True,
     ),
 )

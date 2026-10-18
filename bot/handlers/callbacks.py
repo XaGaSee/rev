@@ -10,12 +10,12 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot.catalog import CATEGORIES, get_model, is_image_model, search_models
+from bot.data.catalog import CATEGORIES, get_model, is_image_model, search_models
 from bot.database.db import Database
 from bot.database.models import User
 from bot.keyboards.inline import (
     admin_menu,
-    back_to_menu,
+    back_to_main,
     cancel,
     confirm_reset,
     cost_menu,
@@ -133,11 +133,9 @@ async def cb_reset_prompt(callback: CallbackQuery) -> None:
 async def cb_image(callback: CallbackQuery, state: FSMContext, user: User) -> None:
     await callback.answer()
     if not is_image_model(user.model):
-        model = get_model(user.model)
         await _edit(
             callback,
-            f"Модель {model.label} не поддерживает генерацию изображений.\n"
-            "Выберите модель для рисования:",
+            "Текущая модель не генерирует изображения. Выберите модель для рисования:",
             image_models_keyboard(user.model),
         )
         return
@@ -325,7 +323,7 @@ async def cb_budget_toggle(
 async def cb_reset_confirm(callback: CallbackQuery, db: Database, user: User) -> None:
     removed = await db.clear_history(user.user_id)
     await callback.answer("Контекст очищен")
-    await _edit(callback, f"Контекст очищен ({removed}).", back_to_menu())
+    await _edit(callback, f"Контекст очищен ({removed}).", back_to_main())
 
 
 # --------------------------------------------------------- FSM text handlers

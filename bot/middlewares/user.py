@@ -7,7 +7,7 @@ from typing import Any, Awaitable, Callable
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, User as TgUser
 
-from bot.catalog import DEFAULT_MODEL_ID, MODEL_MAP
+from bot.data.catalog import DEFAULT_MODEL_ID, MODEL_MAP
 from bot.config import settings
 from bot.database.db import Database
 

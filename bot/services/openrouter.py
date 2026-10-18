@@ -21,15 +21,15 @@ class OpenRouterError(Exception):
 
 
 class AuthError(OpenRouterError):
-    user_message = "Ошибка авторизации API. Проверьте ключ OpenRouter."
+    user_message = "🔑 Ошибка авторизации API ключа."
 
 
 class InsufficientCreditsError(OpenRouterError):
-    user_message = "Недостаточно кредитов на балансе OpenRouter. Пополните счёт."
+    user_message = "💳 Недостаточно кредитов на балансе OpenRouter API."
 
 
 class RateLimitError(OpenRouterError):
-    user_message = "Превышен лимит запросов. Повторите через несколько секунд."
+    user_message = "⏳ Превышен лимит запросов к провайдеру. Повторите попытку через минуту."
 
 
 class UpstreamError(OpenRouterError):
