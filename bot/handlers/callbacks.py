@@ -80,7 +80,7 @@ async def cb_main(
 ) -> None:
     await callback.answer()
     await state.clear()
-    text, markup = get_main_menu_payload(user, is_admin, await db.count_messages(user.user_id))
+    text, markup = get_main_menu_payload(user, await db.count_messages(user.user_id), is_admin)
     await _edit(callback, text, markup)
 
 
@@ -197,7 +197,7 @@ async def cb_model_set(
     user.model = info.id
     await state.clear()
     await callback.answer(f"Модель: {info.name}")
-    text, markup = get_main_menu_payload(user, is_admin, await db.count_messages(user.user_id))
+    text, markup = get_main_menu_payload(user, await db.count_messages(user.user_id), is_admin)
     await _edit(callback, text, markup)
 
 

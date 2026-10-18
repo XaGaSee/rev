@@ -18,7 +18,7 @@ router = Router(name="commands")
 
 async def send_main_menu(message: Message, user: User, is_admin: bool, db: Database) -> None:
     """Render the main screen through the shared payload builder."""
-    text, markup = get_main_menu_payload(user, is_admin, await db.count_messages(user.user_id))
+    text, markup = get_main_menu_payload(user, await db.count_messages(user.user_id), is_admin)
     await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 

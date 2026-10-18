@@ -88,6 +88,7 @@ MODELS: tuple[ModelInfo, ...] = (
     ModelInfo("mimo/mimo-2.6-flash", "MiMo 2.6 Flash", "fast", 0.10, 0.30),
     ModelInfo("deepseek/deepseek-v4.1-flash", "DeepSeek V4.1", "fast", 0.14, 0.28),
     ModelInfo("qwen/qwen-2.5-72b-instruct", "Qwen 2.5 72B", "fast", 0.35, 0.40),
+    ModelInfo("qwen/qwen-3-vl", "Qwen 3 VL", "fast", 0.20, 0.60, supports_vision=True),
     # --- Advanced reasoning ---
     ModelInfo("deepseek/deepseek-v4.1-reasoner", "DeepSeek V4.1 Reasoner", "reasoning", 0.55, 2.20),
     ModelInfo("dots-studio/dots3-note-preview:free", "Dots3 Note", "reasoning"),

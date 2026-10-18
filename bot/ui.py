@@ -18,9 +18,8 @@ from bot.services.tokens import format_tokens
 from bot.utils.text import escape_html
 
 HELP_TEXT = (
-    "AI Assistant Gateway\n\n"
-    "Отправьте текстовый запрос, изображение или голосовое сообщение — "
-    "модель вернёт ответ.\n\n"
+    "AI Gateway\n\n"
+    "Отправьте сообщение, фото или голосовую заметку — модель вернёт ответ.\n\n"
     "/menu — навигация\n"
     "/model — каталог моделей\n"
     "/profile — профиль и статистика\n"
@@ -39,22 +38,24 @@ def _plural_messages(count: int) -> str:
 
 
 def get_main_menu_payload(
-    user: User, is_admin: bool = False, context_messages: int = 0
+    user: User, usage_stats: int, is_admin: bool = False
 ) -> tuple[str, InlineKeyboardMarkup]:
-    """Actual main-screen text and keyboard for *user*."""
+    """Actual main-screen text and keyboard for *user*.
+
+    ``usage_stats`` is the number of dialog turns currently in context.
+    """
     model = get_model(user.model)
     if is_admin:
         limit_line = "без ограничений (администратор)"
     else:
         used = user.daily_count if user.daily_date == utc_today() else 0
         limit_line = f"{used} / {settings.daily_message_limit} запросов (сброс в 00:00 UTC)"
-    context_state = "Контекст активен" if context_messages > 0 else "Контекст пуст"
     text = (
-        "AI Assistant Gateway\n\n"
+        "AI Gateway\n\n"
         f"Модель: {model.label}\n"
         f"Лимит: {limit_line}\n"
-        f"Диалог: {context_messages} {_plural_messages(context_messages)} | {context_state}\n\n"
-        "Отправьте текстовое сообщение, документ, изображение или голосовую заметку."
+        f"Контекст: {usage_stats} {_plural_messages(usage_stats)}\n\n"
+        "Отправьте сообщение, фото или голосовую заметку."
     )
     return text, main_menu(is_admin)
 
