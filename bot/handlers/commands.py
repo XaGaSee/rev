@@ -5,14 +5,12 @@ from __future__ import annotations
 from aiogram import Router
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from bot.catalog import get_model
 from bot.database.db import Database
 from bot.database.models import User
 from bot.keyboards.inline import main_menu
-from bot.services.pricing import format_cost
-from bot.services.tokens import format_tokens
 from bot.ui import HELP_TEXT, get_main_menu_payload, get_models_payload, get_profile_payload
 
 router = Router(name="commands")
@@ -25,12 +23,14 @@ async def send_main_menu(message: Message, user: User, is_admin: bool) -> None:
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, user: User, is_admin: bool) -> None:
+async def cmd_start(message: Message, state: FSMContext, user: User, is_admin: bool) -> None:
+    await state.clear()
     await send_main_menu(message, user, is_admin)
 
 
 @router.message(Command("menu"))
-async def cmd_menu(message: Message, user: User, is_admin: bool) -> None:
+async def cmd_menu(message: Message, state: FSMContext, user: User, is_admin: bool) -> None:
+    await state.clear()
     await send_main_menu(message, user, is_admin)
 
 

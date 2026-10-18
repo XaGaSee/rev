@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from io import BytesIO
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.enums import ChatAction, ParseMode
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import Message
@@ -29,7 +29,7 @@ router = Router(name="media")
 _MAX_VOICE_BYTES = 20 * 1024 * 1024
 
 
-async def _download(bot, file_id: str) -> bytes:
+async def _download(bot: Bot, file_id: str) -> bytes:
     file = await bot.get_file(file_id)
     if file.file_path is None:
         raise ValueError("Telegram returned no file path")

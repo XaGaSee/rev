@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, AsyncIterator
 
 import aiosqlite
 
@@ -130,6 +131,16 @@ class Database:
     async def __aexit__(self, *exc_info: object) -> None:
         await self.close()
 
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
+        """Run a group of statements atomically (commit on success, rollback on error)."""
+        try:
+            yield self.connection
+            await self.connection.commit()
+        except BaseException:
+            await self.connection.rollback()
+            raise
+
     # ------------------------------------------------------------------ users
     async def get_or_create_user(
         self,
@@ -139,28 +150,24 @@ class Database:
         default_model: str,
         default_temperature: float,
     ) -> User:
-        """Fetch a user or insert a fresh row."""
-        row = await self._fetchone("SELECT * FROM users WHERE user_id = ?", (user_id,))
-        if row is None:
-            now = _now()
+        """Atomically upsert a user row and return the current record."""
+        now = _now()
+        async with self.transaction():
             await self.connection.execute(
                 """
-                INSERT INTO users
-                    (user_id, username, first_name, model, temperature,
-                     system_prompt, requests, tokens, created_at, last_active)
-                VALUES (?, ?, ?, ?, ?, NULL, 0, 0, ?, ?)
+                INSERT INTO users (
+                    user_id, username, first_name, model, temperature, system_prompt,
+                    requests, tokens, prompt_tokens, completion_tokens, cost, budget,
+                    daily_count, daily_date, created_at, last_active
+                ) VALUES (?, ?, ?, ?, ?, NULL, 0, 0, 0, 0, 0.0, 0.0, 0, NULL, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    username = excluded.username,
+                    first_name = excluded.first_name,
+                    last_active = excluded.last_active
                 """,
                 (user_id, username, first_name, default_model, default_temperature, now, now),
             )
-            await self.connection.commit()
-            row = await self._fetchone("SELECT * FROM users WHERE user_id = ?", (user_id,))
-        else:
-            await self.connection.execute(
-                "UPDATE users SET username = ?, first_name = ?, last_active = ? WHERE user_id = ?",
-                (username, first_name, _now(), user_id),
-            )
-            await self.connection.commit()
-            row = await self._fetchone("SELECT * FROM users WHERE user_id = ?", (user_id,))
+        row = await self._fetchone("SELECT * FROM users WHERE user_id = ?", (user_id,))
         assert row is not None
         return self._to_user(row)
 
@@ -217,25 +224,26 @@ class Database:
         Returns ``(allowed, used_today)``; the counter rolls over at midnight UTC.
         """
         today = _today()
-        row = await self._fetchone(
-            "SELECT daily_count, daily_date FROM users WHERE user_id = ?", (user_id,)
-        )
-        if row is None:
-            return True, 0
-        count = int(row["daily_count"] or 0)
-        if row["daily_date"] != today:
-            count = 0
-        if count >= limit:
+        async with self.transaction():
+            row = await self._fetchone(
+                "SELECT daily_count, daily_date FROM users WHERE user_id = ?", (user_id,)
+            )
+            if row is None:
+                return True, 0
+            count = int(row["daily_count"] or 0)
             if row["daily_date"] != today:
-                await self._execute(
-                    "UPDATE users SET daily_date = ? WHERE user_id = ?", (today, user_id)
-                )
-            return False, count
-        count += 1
-        await self._execute(
-            "UPDATE users SET daily_count = ?, daily_date = ? WHERE user_id = ?",
-            (count, today, user_id),
-        )
+                count = 0
+            if count >= limit:
+                if row["daily_date"] != today:
+                    await self.connection.execute(
+                        "UPDATE users SET daily_date = ? WHERE user_id = ?", (today, user_id)
+                    )
+                return False, count
+            count += 1
+            await self.connection.execute(
+                "UPDATE users SET daily_count = ?, daily_date = ? WHERE user_id = ?",
+                (count, today, user_id),
+            )
         return True, count
 
     async def reset_daily_limit(self, user_id: int) -> bool:
@@ -263,26 +271,26 @@ class Database:
 
     # ---------------------------------------------------------------- pricing
     async def save_pricing(self, items: list[tuple[str, float, float, float]]) -> None:
-        """Bulk upsert ``(model_id, prompt, completion, image)`` rows."""
+        """Bulk upsert ``(model_id, prompt, completion, image)`` rows atomically."""
         if not items:
             return
         now = _now()
-        await self.connection.executemany(
-            """
-            INSERT INTO pricing (model_id, prompt, completion, image, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(model_id) DO UPDATE SET
-                prompt = excluded.prompt,
-                completion = excluded.completion,
-                image = excluded.image,
-                updated_at = excluded.updated_at
-            """,
-            [
-                (model_id, prompt, completion, image, now)
-                for model_id, prompt, completion, image in items
-            ],
-        )
-        await self.connection.commit()
+        async with self.transaction():
+            await self.connection.executemany(
+                """
+                INSERT INTO pricing (model_id, prompt, completion, image, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(model_id) DO UPDATE SET
+                    prompt = excluded.prompt,
+                    completion = excluded.completion,
+                    image = excluded.image,
+                    updated_at = excluded.updated_at
+                """,
+                [
+                    (model_id, prompt, completion, image, now)
+                    for model_id, prompt, completion, image in items
+                ],
+            )
 
     async def get_pricing_all(self) -> dict[str, tuple[float, float, float]]:
         """Return the whole cached price table."""

@@ -24,6 +24,10 @@ class AuthError(OpenRouterError):
     user_message = "🔒 Ошибка авторизации OpenRouter. Проверьте API-ключ."
 
 
+class InsufficientCreditsError(OpenRouterError):
+    user_message = "💳 Недостаточно кредитов на балансе OpenRouter. Пополните счёт и повторите."
+
+
 class RateLimitError(OpenRouterError):
     user_message = "⏳ Достигнут лимит запросов. Подождите немного и повторите."
 
@@ -137,6 +141,8 @@ class OpenRouterClient:
         logger.warning("OpenRouter HTTP %s: %s", status, detail)
         if status in (401, 403):
             raise AuthError(detail)
+        if status == 402:
+            raise InsufficientCreditsError(detail)
         if status == 429:
             raise RateLimitError(detail)
         if status in (400, 404, 422):
@@ -347,9 +353,14 @@ class OpenRouterClient:
         session = await self._get_session()
         try:
             async with session.get(url) as response:
-                self._raise_for_status(response.status, await response.text())
-                return await response.read()
+                data = await response.read()
+                if response.status >= 400:
+                    body = data[:500].decode("utf-8", errors="ignore")
+                    self._raise_for_status(response.status, body)
+                return data
         except aiohttp.ClientError as exc:
+            raise NetworkError(str(exc)) from exc
+        except TimeoutError as exc:
             raise NetworkError(str(exc)) from exc
 
     async def list_models(self) -> list[dict[str, Any]]:

@@ -15,7 +15,7 @@ from aiogram.types import BufferedInputFile, Message
 from bot.catalog import get_model, is_image_model
 from bot.config import settings
 from bot.database.db import Database
-from bot.database.models import User
+from bot.database.models import HistoryMessage, User
 from bot.keyboards.inline import image_actions, image_models_keyboard
 from bot.services.image import data_url_to_bytes, is_data_url
 from bot.services.openrouter import (
@@ -93,7 +93,12 @@ async def _render_answer(bot: Bot, chat_id: int, placeholder: Message, html_text
         await _safe_send(bot, chat_id, chunk)
 
 
-def _build_messages(user: User, history, user_text: str, image_urls: list[str] | None):
+def _build_messages(
+    user: User,
+    history: list[HistoryMessage],
+    user_text: str,
+    image_urls: list[str] | None,
+) -> list[ChatMessage]:
     """Assemble a trimmed chat payload (system prompt + sliding window)."""
     messages: list[ChatMessage] = []
     if user.system_prompt:
