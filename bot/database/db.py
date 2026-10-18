@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -68,11 +69,16 @@ def _today() -> str:
 
 
 class Database:
-    """Thin async wrapper around a single SQLite connection."""
+    """Thin async wrapper around a single SQLite connection.
+
+    All writes go through :attr:`_lock` so concurrent coroutines can never
+    interleave statements on the shared connection.
+    """
 
     def __init__(self, path: str) -> None:
         self._path = path
         self._conn: aiosqlite.Connection | None = None
+        self._lock = asyncio.Lock()
 
     @property
     def connection(self) -> aiosqlite.Connection:
@@ -134,12 +140,13 @@ class Database:
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
         """Run a group of statements atomically (commit on success, rollback on error)."""
-        try:
-            yield self.connection
-            await self.connection.commit()
-        except BaseException:
-            await self.connection.rollback()
-            raise
+        async with self._lock:
+            try:
+                yield self.connection
+                await self.connection.commit()
+            except BaseException:
+                await self.connection.rollback()
+                raise
 
     # ------------------------------------------------------------------ users
     async def get_or_create_user(
@@ -248,12 +255,13 @@ class Database:
 
     async def reset_daily_limit(self, user_id: int) -> bool:
         """Zero out the daily counter for a user (admin action)."""
-        cursor = await self.connection.execute(
-            "UPDATE users SET daily_count = 0, daily_date = ? WHERE user_id = ?",
-            (_today(), user_id),
-        )
-        await self.connection.commit()
-        return bool(cursor.rowcount)
+        async with self._lock:
+            cursor = await self.connection.execute(
+                "UPDATE users SET daily_count = 0, daily_date = ? WHERE user_id = ?",
+                (_today(), user_id),
+            )
+            await self.connection.commit()
+            return bool(cursor.rowcount)
 
     async def count_active_today(self) -> int:
         """Number of users who generated at least one message today (UTC)."""
@@ -338,11 +346,12 @@ class Database:
 
     async def clear_history(self, user_id: int) -> int:
         """Delete all turns for a user, returning the number removed."""
-        cursor = await self.connection.execute(
-            "DELETE FROM messages WHERE user_id = ?", (user_id,)
-        )
-        await self.connection.commit()
-        return cursor.rowcount or 0
+        async with self._lock:
+            cursor = await self.connection.execute(
+                "DELETE FROM messages WHERE user_id = ?", (user_id,)
+            )
+            await self.connection.commit()
+            return cursor.rowcount or 0
 
     async def count_messages(self, user_id: int) -> int:
         """Number of stored dialog turns for a user."""
@@ -384,8 +393,9 @@ class Database:
 
     # --------------------------------------------------------------- internal
     async def _execute(self, query: str, params: tuple[Any, ...] = ()) -> None:
-        await self.connection.execute(query, params)
-        await self.connection.commit()
+        async with self._lock:
+            await self.connection.execute(query, params)
+            await self.connection.commit()
 
     async def _fetchone(
         self, query: str, params: tuple[Any, ...] = ()

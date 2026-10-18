@@ -196,7 +196,10 @@ async def cb_model_set(
     await db.set_model(user.user_id, info.id)
     user.model = info.id
     await state.clear()
-    await callback.answer(f"Модель: {info.name}")
+    if info.supports_image_generation:
+        await callback.answer("Модель выбрана. Отправьте описание изображения.")
+    else:
+        await callback.answer(f"Модель: {info.name}")
     text, markup = get_main_menu_payload(user, await db.count_messages(user.user_id), is_admin)
     await _edit(callback, text, markup)
 

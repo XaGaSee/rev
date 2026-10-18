@@ -29,6 +29,17 @@ def back_to_main() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[_btn("Назад", "menu:main")]])
 
 
+def profile_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
+    """Profile screen actions: entry point for settings + navigation."""
+    rows: list[list[InlineKeyboardButton]] = [
+        [_btn("Настройки", "menu:settings")],
+        [_btn("Назад", "menu:main")],
+    ]
+    if is_admin:
+        rows.append([_btn("Админ-панель", "menu:admin")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def models_categories() -> InlineKeyboardMarkup:
     """Category picker for the model catalog."""
     rows = [[_btn(c.title, f"models:cat:{c.key}")] for c in CATEGORIES]

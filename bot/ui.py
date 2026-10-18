@@ -12,7 +12,7 @@ from bot.config import settings
 from bot.data.catalog import get_model
 from bot.database.db import utc_today
 from bot.database.models import User
-from bot.keyboards.inline import main_menu, models_categories
+from bot.keyboards.inline import main_menu, models_categories, profile_menu
 from bot.services.pricing import format_cost
 from bot.services.tokens import format_tokens
 from bot.utils.text import escape_html
@@ -84,4 +84,4 @@ def get_profile_payload(user: User, is_admin: bool = False) -> tuple[str, Inline
         f"выход {format_tokens(user.completion_tokens)}\n"
         f"Потрачено: {format_cost(user.cost)} · Бюджет: {budget}"
     )
-    return text, main_menu(is_admin)
+    return text, profile_menu(is_admin)
